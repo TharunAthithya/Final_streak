@@ -1,0 +1,306 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum HabitStatus {
+  ACTIVE
+  ARCHIVED
+  PAUSED
+}
+
+enum ScheduleType {
+  DAILY
+  SPECIFIC_DAYS
+  FLEXIBLE
+}
+
+enum RoomVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum RoomRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum ActivityType {
+  HABIT_COMPLETED
+  STREAK_MILESTONE
+  PERSONAL_BEST
+  ROOM_JOIN
+  LEVEL_UP
+}
+
+model User {
+  id                    String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  authUserId            String            @unique @map("auth_user_id")
+  email                 String            @unique
+  displayName           String            @map("display_name")
+  username              String?           @unique
+  avatarPath            String?           @map("avatar_path")
+  bio                   String?
+  timezone              String            @default("UTC")
+  locale                String            @default("en")
+  xp                    Int               @default(0)
+  level                 Int               @default(1)
+  onboardingCompletedAt DateTime?         @map("onboarding_completed_at") @db.Timestamptz
+  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt             DateTime?         @map("deleted_at") @db.Timestamptz
+
+  habits                Habit[]
+  checkIns              CheckIn[]
+  roomMemberships       RoomMember[]
+  activities            Activity[]
+  reactions             Reaction[]
+  userAchievements      UserAchievement[]
+  devices               Device[]
+  notificationDeliveries NotificationDelivery[]
+  ownedRooms            Room[]            @relation("RoomOwner")
+
+  @@index([username])
+  @@map("users")
+}
+
+model Habit {
+  id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String            @map("user_id") @db.Uuid
+  name          String
+  description   String?
+  icon          String?
+  status        HabitStatus       @default(ACTIVE)
+  scheduleType  ScheduleType      @default(DAILY) @map("schedule_type")
+  targetPerWeek Int?              @map("target_per_week")
+  timezone      String
+  startDate     DateTime          @map("start_date") @db.Date
+  archivedAt    DateTime?         @map("archived_at") @db.Timestamptz
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scheduleDays  HabitScheduleDay[]
+  checkIns      CheckIn[]
+  stats         HabitStats?
+  roomHabitLinks RoomHabitLink[]
+
+  @@index([userId])
+  @@map("habits")
+}
+
+model HabitScheduleDay {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  habitId   String   @map("habit_id") @db.Uuid
+  dayOfWeek Int      @map("day_of_week")
+
+  habit     Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  @@unique([habitId, dayOfWeek])
+  @@map("habit_schedule_days")
+}
+
+model CheckIn {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId               String   @map("user_id") @db.Uuid
+  habitId              String   @map("habit_id") @db.Uuid
+  localDate            DateTime @map("local_date") @db.Date
+  completedAtUtc       DateTime @map("completed_at_utc") @db.Timestamptz
+  timezoneAtCompletion String   @map("timezone_at_completion")
+  source               String   @default("mobile")
+  idempotencyKey       String   @unique @map("idempotency_key")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  habit                Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  @@index([habitId, localDate])
+  @@index([userId, localDate])
+  @@map("check_ins")
+}
+
+model HabitStats {
+  habitId          String   @id @map("habit_id") @db.Uuid
+  currentStreak    Int      @default(0) @map("current_streak")
+  bestStreak       Int      @default(0) @map("best_streak")
+  totalCompletions Int      @default(0) @map("total_completions")
+  completionRate   Decimal  @default(0.00) @map("completion_rate") @db.Decimal(5, 2)
+  recalculatedAt   DateTime @default(now()) @map("recalculated_at") @db.Timestamptz
+
+  habit            Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  @@map("habit_stats")
+}
+
+model Room {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId     String         @map("owner_id") @db.Uuid
+  name        String
+  description String?
+  imagePath   String?        @map("image_path")
+  visibility  RoomVisibility @default(PRIVATE)
+  inviteCode  String?        @unique @map("invite_code")
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  archivedAt  DateTime?      @map("archived_at") @db.Timestamptz
+
+  owner       User           @relation("RoomOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  members     RoomMember[]
+  roomHabits  RoomHabit[]
+  activities  Activity[]
+
+  @@map("rooms")
+}
+
+model RoomMember {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  roomId         String          @map("room_id") @db.Uuid
+  userId         String          @map("user_id") @db.Uuid
+  role           RoomRole        @default(MEMBER)
+  joinedAt       DateTime        @default(now()) @map("joined_at") @db.Timestamptz
+  leftAt         DateTime?       @map("left_at") @db.Timestamptz
+
+  room           Room            @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roomHabitLinks RoomHabitLink[]
+
+  @@index([userId])
+  // Active membership uniqueness is handled by partial unique index in DB migration.
+  @@map("room_members")
+}
+
+model RoomHabit {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  roomId         String          @map("room_id") @db.Uuid
+  name           String
+  description    String?
+  archivedAt     DateTime?       @map("archived_at") @db.Timestamptz
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  room           Room            @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  roomHabitLinks RoomHabitLink[]
+
+  @@index([roomId])
+  @@map("room_habits")
+}
+
+model RoomHabitLink {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  roomMemberId    String    @map("room_member_id") @db.Uuid
+  roomHabitId     String    @map("room_habit_id") @db.Uuid
+  personalHabitId String    @map("personal_habit_id") @db.Uuid
+  linkedAt        DateTime  @default(now()) @map("linked_at") @db.Timestamptz
+  unlinkedAt      DateTime? @map("unlinked_at") @db.Timestamptz
+
+  roomMember      RoomMember @relation(fields: [roomMemberId], references: [id], onDelete: Cascade)
+  roomHabit       RoomHabit  @relation(fields: [roomHabitId], references: [id], onDelete: Cascade)
+  personalHabit   Habit      @relation(fields: [personalHabitId], references: [id], onDelete: Cascade)
+  activities      Activity[]
+
+  @@index([roomMemberId])
+  // Active link uniqueness constraints handled by partial unique indexes in DB migration.
+  @@map("room_habit_links")
+}
+
+model Activity {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorUserId     String       @map("actor_user_id") @db.Uuid
+  roomId          String?      @map("room_id") @db.Uuid
+  roomHabitLinkId String?      @map("room_habit_link_id") @db.Uuid
+  type            ActivityType
+  message         String
+  metadataJson    Json?        @map("metadata_json")
+  visibility      RoomVisibility @default(PRIVATE)
+  deduplicationKey String?     @unique @map("deduplication_key")
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  actor           User         @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+  room            Room?        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  roomHabitLink   RoomHabitLink? @relation(fields: [roomHabitLinkId], references: [id], onDelete: SetNull)
+  reactions       Reaction[]
+
+  @@index([roomId, createdAt(sort: Desc)])
+  @@map("activities")
+}
+
+model Reaction {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  activityId String   @map("activity_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  type       String
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([activityId, userId, type])
+  @@map("reactions")
+}
+
+model Device {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  platform    String
+  pushToken   String   @map("push_token")
+  tokenStatus String   @default("ACTIVE") @map("token_status")
+  appVersion  String?  @map("app_version")
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at") @db.Timestamptz
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pushToken])
+  @@map("devices")
+}
+
+model NotificationDelivery {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String    @map("user_id") @db.Uuid
+  deviceId           String?   @map("device_id") @db.Uuid
+  type               String
+  deduplicationKey   String    @unique @map("deduplication_key")
+  scheduledFor       DateTime? @map("scheduled_for") @db.Timestamptz
+  sentAt             DateTime? @map("sent_at") @db.Timestamptz
+  status             String    @default("PENDING")
+  providerMessageId  String?   @map("provider_message_id")
+  failureReason      String?   @map("failure_reason")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_deliveries")
+}
+
+model Achievement {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key             String            @unique
+  name            String
+  description     String
+  icon            String?
+  criteriaVersion Int               @default(1) @map("criteria_version")
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  userAchievements UserAchievement[]
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String      @map("user_id") @db.Uuid
+  achievementId String      @map("achievement_id") @db.Uuid
+  unlockedAt    DateTime    @default(now()) @map("unlocked_at") @db.Timestamptz
+  sourceEventId String?     @map("source_event_id")
+
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@map("user_achievements")
+}
