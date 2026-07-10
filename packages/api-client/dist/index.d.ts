@@ -1,18 +1,16 @@
+import { SupabaseClient } from '@supabase/supabase-js';
 import { UserResponse, HabitResponse, CheckInResponse, RoomResponse, ActivityResponse } from '@streak/contracts';
 import { CreateHabitDto, CheckInDto, CreateRoomDto, JoinRoomDto, UpdateUserDto } from '@streak/validation';
 export declare class StreakApiClient {
-    private baseUrl;
-    private token;
-    constructor(baseUrl: string);
-    setToken(token: string | null): void;
-    private request;
+    supabase: SupabaseClient;
+    constructor(supabaseUrl: string, supabaseAnonKey: string);
     getMe(): Promise<UserResponse>;
     updateProfile(dto: UpdateUserDto): Promise<UserResponse>;
-    deleteAccount(): Promise<{
-        success: boolean;
-    }>;
     getHabits(includeArchived?: boolean): Promise<HabitResponse[]>;
     createHabit(dto: CreateHabitDto): Promise<HabitResponse>;
+    deleteHabit(habitId: string): Promise<{
+        success: boolean;
+    }>;
     checkInHabit(habitId: string, dto: CheckInDto): Promise<{
         checkIn: CheckInResponse;
         stats: {
@@ -61,5 +59,8 @@ export declare class StreakApiClient {
     reactToActivity(activityId: string, type: string): Promise<{
         success: boolean;
         reacted: boolean;
+    }>;
+    deleteAccount(): Promise<{
+        success: boolean;
     }>;
 }

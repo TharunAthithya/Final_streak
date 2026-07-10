@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@streak/contracts": "workspace:*",
-    "@streak/validation": "workspace:*"
+    "@streak/validation": "workspace:*",
+    "@supabase/supabase-js": "^2.39.0"
   },
   "devDependencies": {
     "typescript": "^5.0.0"
