@@ -48,9 +48,16 @@ export interface HabitResponse {
     targetPerWeek?: number;
     timezone: string;
     startDate: string;
+    reminderTime?: string | null;
+    completedToday?: boolean;
+    todayCheckInId?: string | null;
     archivedAt?: string;
     createdAt: string;
     stats?: HabitStatsResponse;
+    checkIns?: Array<{
+        id: string;
+        localDate: string;
+    }>;
 }
 export interface HabitStatsResponse {
     currentStreak: number;
@@ -94,4 +101,20 @@ export interface ActivityResponse {
         count: number;
         userReacted: boolean;
     }>;
+}
+export interface ReflectionResponse {
+    id: string;
+    userId: string;
+    localDate: string;
+    prompt: string;
+    response?: string | null;
+    completedAt: string;
+    createdAt: string;
+    updatedAt: string;
+}
+export interface CreateReflectionDto {
+    localDate: string;
+    prompt: string;
+    response?: string;
+    completedAt?: string;
 }

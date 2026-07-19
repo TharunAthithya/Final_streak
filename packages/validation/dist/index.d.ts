@@ -28,6 +28,7 @@ export declare const CreateHabitSchema: z.ZodObject<{
     targetPerWeek: z.ZodOptional<z.ZodNumber>;
     timezone: z.ZodString;
     startDate: z.ZodString;
+    reminderTime: z.ZodOptional<z.ZodNullable<z.ZodString>>;
 }, "strip", z.ZodTypeAny, {
     timezone: string;
     name: string;
@@ -37,6 +38,7 @@ export declare const CreateHabitSchema: z.ZodObject<{
     icon?: string | undefined;
     daysOfWeek?: number[] | undefined;
     targetPerWeek?: number | undefined;
+    reminderTime?: string | null | undefined;
 }, {
     timezone: string;
     name: string;
@@ -46,6 +48,7 @@ export declare const CreateHabitSchema: z.ZodObject<{
     icon?: string | undefined;
     daysOfWeek?: number[] | undefined;
     targetPerWeek?: number | undefined;
+    reminderTime?: string | null | undefined;
 }>;
 export type CreateHabitDto = z.infer<typeof CreateHabitSchema>;
 export declare const CheckInSchema: z.ZodObject<{

@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS public.habits (
   target_per_week INTEGER CHECK (target_per_week BETWEEN 1 AND 7),
   timezone VARCHAR(100) NOT NULL,
   start_date DATE NOT NULL,
+  reminder_time TIME,
   archived_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
@@ -236,6 +237,20 @@ CREATE TABLE IF NOT EXISTS public.notification_deliveries (
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
+-- Reflections
+CREATE TABLE IF NOT EXISTS public.reflections (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  local_date DATE NOT NULL,
+  prompt TEXT NOT NULL,
+  response TEXT,
+  completed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  UNIQUE(profile_id, local_date)
+);
+
+
 -- ==========================================================
 -- 2. Row Level Security (RLS) Enablement
 -- ==========================================================
@@ -253,6 +268,8 @@ ALTER TABLE public.activities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.reactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.devices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notification_deliveries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.reflections ENABLE ROW LEVEL SECURITY;
+
 
 -- ==========================================================
 -- 3. RLS Security Policies
@@ -282,6 +299,9 @@ CREATE POLICY schedule_days_all_owner ON public.habit_schedule_days FOR ALL
 
 -- Check-ins: Owner CRUD only
 CREATE POLICY check_ins_all_owner ON public.check_ins FOR ALL USING (auth.uid() = profile_id);
+
+-- Reflections: Owner CRUD only
+CREATE POLICY reflections_all_owner ON public.reflections FOR ALL USING (auth.uid() = profile_id);
 
 -- Habit Stats: Access inherited from habits owner
 CREATE POLICY stats_select_owner ON public.habit_stats FOR SELECT 

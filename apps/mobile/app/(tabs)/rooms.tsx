@@ -9,15 +9,27 @@ import {
   Alert,
 } from 'react-native';
 import { useAuthStore } from '../../src/store/auth-store';
+import { useRoomStore } from '../../src/store/room-store';
 
 export default function RoomsScreen() {
-  const { apiClient, user } = useAuthStore();
-  const [rooms, setRooms] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { apiClient } = useAuthStore();
+  const {
+    rooms,
+    selectedRoomDetails: roomDetails,
+    leaderboard,
+    personalHabits,
+    loading,
+    loadingDetails,
+    fetchRooms,
+    createRoom,
+    joinRoom,
+    leaveRoom,
+    fetchRoomDetails,
+    linkPersonalHabit,
+    unlinkPersonalHabit,
+  } = useRoomStore();
+
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
-  const [roomDetails, setRoomDetails] = useState<any | null>(null);
-  const [leaderboard, setLeaderboard] = useState<any[]>([]);
-  const [loadingDetails, setLoadingDetails] = useState(false);
 
   // Forms Visibility
   const [showCreate, setShowCreate] = useState(false);
@@ -32,54 +44,22 @@ export default function RoomsScreen() {
   const [inviteCode, setInviteCode] = useState('');
 
   // Link Habit State
-  const [personalHabits, setPersonalHabits] = useState<any[]>([]);
   const [linkingRoomHabitId, setLinkingRoomHabitId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchRooms();
+    fetchRooms(apiClient);
   }, []);
 
   useEffect(() => {
     if (selectedRoomId) {
-      fetchRoomDetails(selectedRoomId);
+      fetchRoomDetails(apiClient, selectedRoomId);
     }
   }, [selectedRoomId]);
-
-  const fetchRooms = async () => {
-    setLoading(true);
-    try {
-      const data = await apiClient.getRooms();
-      setRooms(data);
-    } catch (e: any) {
-      console.warn('Failed to load rooms:', e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchRoomDetails = async (roomId: string) => {
-    setLoadingDetails(true);
-    try {
-      const details = await apiClient.getRoomDetails(roomId);
-      setRoomDetails(details);
-
-      const board = await apiClient.getRoomLeaderboard(roomId, 'weekly');
-      setLeaderboard(board);
-
-      const habitsData = await apiClient.getHabits();
-      setPersonalHabits(habitsData);
-    } catch (e: any) {
-      Alert.alert('Error loading room', e.message);
-      setSelectedRoomId(null);
-    } finally {
-      setLoadingDetails(false);
-    }
-  };
 
   const handleCreateRoom = async () => {
     if (!roomName.trim()) return;
     try {
-      await apiClient.createRoom({
+      await createRoom(apiClient, {
         name: roomName.trim(),
         description: roomDesc.trim() || undefined,
         visibility,
@@ -87,7 +67,6 @@ export default function RoomsScreen() {
       setRoomName('');
       setRoomDesc('');
       setShowCreate(false);
-      fetchRooms();
     } catch (e: any) {
       Alert.alert('Error', e.message);
     }
@@ -96,10 +75,9 @@ export default function RoomsScreen() {
   const handleJoinRoom = async () => {
     if (!inviteCode.trim()) return;
     try {
-      await apiClient.joinRoom({ inviteCode: inviteCode.trim().toUpperCase() });
+      await joinRoom(apiClient, { inviteCode: inviteCode.trim().toUpperCase() });
       setInviteCode('');
       setShowJoin(false);
-      fetchRooms();
     } catch (e: any) {
       Alert.alert('Error', e.message);
     }
@@ -117,10 +95,8 @@ export default function RoomsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await apiClient.leaveRoom(selectedRoomId);
+              await leaveRoom(apiClient, selectedRoomId);
               setSelectedRoomId(null);
-              setRoomDetails(null);
-              fetchRooms();
             } catch (e: any) {
               Alert.alert('Error', e.message);
             }
@@ -133,9 +109,8 @@ export default function RoomsScreen() {
   const handleLinkHabit = async (roomHabitId: string, personalHabitId: string) => {
     if (!selectedRoomId) return;
     try {
-      await apiClient.linkPersonalHabit(selectedRoomId, roomHabitId, personalHabitId);
+      await linkPersonalHabit(apiClient, selectedRoomId, roomHabitId, personalHabitId);
       setLinkingRoomHabitId(null);
-      fetchRoomDetails(selectedRoomId);
     } catch (e: any) {
       Alert.alert('Error linking habit', e.message);
     }
@@ -144,8 +119,7 @@ export default function RoomsScreen() {
   const handleUnlinkHabit = async (roomHabitId: string) => {
     if (!selectedRoomId) return;
     try {
-      await apiClient.unlinkPersonalHabit(selectedRoomId, roomHabitId);
-      fetchRoomDetails(selectedRoomId);
+      await unlinkPersonalHabit(apiClient, selectedRoomId, roomHabitId);
     } catch (e: any) {
       Alert.alert('Error unlinking habit', e.message);
     }
@@ -160,7 +134,6 @@ export default function RoomsScreen() {
           <TouchableOpacity
             onPress={() => {
               setSelectedRoomId(null);
-              setRoomDetails(null);
             }}
             className="px-3 py-2 bg-white border border-[#E6E9E6] rounded-xl"
           >

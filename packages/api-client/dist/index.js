@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 export class StreakApiClient {
     supabase;
-    constructor(supabaseUrl, supabaseAnonKey) {
-        this.supabase = createClient(supabaseUrl, supabaseAnonKey);
+    constructor(supabaseUrl, supabaseAnonKey, options) {
+        this.supabase = createClient(supabaseUrl, supabaseAnonKey, options);
     }
     // Auth & Profile CRUD
     async getMe() {
@@ -65,35 +65,45 @@ export class StreakApiClient {
     }
     // Habits Simple CRUD (direct table queries)
     async getHabits(includeArchived = false) {
+        const todayStr = new Date().toISOString().split('T')[0];
         const query = this.supabase
             .from('habits')
-            .select('*, habit_stats(*)');
+            .select('*, habit_stats(*), check_ins(id, local_date)');
         if (!includeArchived) {
             query.eq('status', 'ACTIVE');
         }
         const { data, error } = await query;
         if (error)
             throw new Error(error.message);
-        return (data || []).map((h) => ({
-            id: h.id,
-            userId: h.profile_id,
-            name: h.name,
-            description: h.description,
-            icon: h.icon,
-            status: h.status,
-            scheduleType: h.schedule_type,
-            targetPerWeek: h.target_per_week,
-            timezone: h.timezone,
-            startDate: h.start_date,
-            archivedAt: h.archived_at,
-            createdAt: h.created_at,
-            stats: h.habit_stats ? {
-                currentStreak: h.habit_stats.current_streak,
-                bestStreak: h.habit_stats.best_streak,
-                totalCompletions: h.habit_stats.total_completions,
-                completionRate: Number(h.habit_stats.completion_rate),
-            } : undefined,
-        }));
+        return (data || []).map((h) => {
+            const todayCheckIn = h.check_ins?.find((c) => c.local_date === todayStr);
+            const completedToday = !!todayCheckIn;
+            const todayCheckInId = todayCheckIn?.id || null;
+            return {
+                id: h.id,
+                userId: h.profile_id,
+                name: h.name,
+                description: h.description,
+                icon: h.icon,
+                status: h.status,
+                scheduleType: h.schedule_type,
+                targetPerWeek: h.target_per_week,
+                timezone: h.timezone,
+                startDate: h.start_date,
+                reminderTime: h.reminder_time,
+                completedToday,
+                todayCheckInId,
+                archivedAt: h.archived_at,
+                createdAt: h.created_at,
+                stats: h.habit_stats ? {
+                    currentStreak: h.habit_stats.current_streak,
+                    bestStreak: h.habit_stats.best_streak,
+                    totalCompletions: h.habit_stats.total_completions,
+                    completionRate: Number(h.habit_stats.completion_rate),
+                } : undefined,
+                checkIns: h.check_ins?.map((c) => ({ id: c.id, localDate: c.local_date })) || [],
+            };
+        });
     }
     async createHabit(dto) {
         const { data: { user } } = await this.supabase.auth.getUser();
@@ -111,6 +121,7 @@ export class StreakApiClient {
             target_per_week: dto.targetPerWeek,
             timezone: dto.timezone,
             start_date: dto.startDate,
+            reminder_time: dto.reminderTime,
         })
             .select()
             .single();
@@ -139,9 +150,29 @@ export class StreakApiClient {
             targetPerWeek: habit.target_per_week,
             timezone: habit.timezone,
             startDate: habit.start_date,
+            reminderTime: habit.reminder_time,
             archivedAt: habit.archived_at,
             createdAt: habit.created_at,
         };
+    }
+    async getHabitCheckIns(habitId, limit = 14) {
+        const { data, error } = await this.supabase
+            .from('check_ins')
+            .select('*')
+            .eq('habit_id', habitId)
+            .order('local_date', { ascending: false })
+            .limit(limit);
+        if (error)
+            throw new Error(error.message);
+        return (data || []).map((c) => ({
+            id: c.id,
+            userId: c.profile_id,
+            habitId: c.habit_id,
+            localDate: c.local_date,
+            completedAtUtc: c.completed_at_utc,
+            timezoneAtCompletion: c.timezone_at_completion,
+            source: c.source,
+        }));
     }
     async deleteHabit(habitId) {
         const { error } = await this.supabase
@@ -510,5 +541,77 @@ export class StreakApiClient {
         if (error)
             throw new Error(error.message);
         return { success: data };
+    }
+    async forgotPassword(email, redirectTo) {
+        const { error } = await this.supabase.auth.resetPasswordForEmail(email, {
+            redirectTo,
+        });
+        if (error)
+            throw new Error(error.message);
+        return { success: true };
+    }
+    async resetPassword(newPassword) {
+        const { error } = await this.supabase.auth.updateUser({
+            password: newPassword,
+        });
+        if (error)
+            throw new Error(error.message);
+        return { success: true };
+    }
+    async getReflectionForDate(localDate) {
+        const { data: { user } } = await this.supabase.auth.getUser();
+        if (!user)
+            throw new Error('Not authenticated');
+        const { data, error } = await this.supabase
+            .from('reflections')
+            .select('*')
+            .eq('profile_id', user.id)
+            .eq('local_date', localDate)
+            .maybeSingle();
+        if (error)
+            throw new Error(error.message);
+        if (!data)
+            return null;
+        return {
+            id: data.id,
+            userId: data.profile_id,
+            localDate: data.local_date,
+            prompt: data.prompt,
+            response: data.response,
+            completedAt: data.completed_at,
+            createdAt: data.created_at,
+            updatedAt: data.updated_at,
+        };
+    }
+    async submitReflection(dto) {
+        const { data: { user } } = await this.supabase.auth.getUser();
+        if (!user)
+            throw new Error('Not authenticated');
+        const { data, error } = await this.supabase
+            .from('reflections')
+            .upsert({
+            profile_id: user.id,
+            local_date: dto.localDate,
+            prompt: dto.prompt,
+            response: dto.response || null,
+            completed_at: dto.completedAt || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        }, {
+            onConflict: 'profile_id, local_date',
+        })
+            .select('*')
+            .single();
+        if (error)
+            throw new Error(error.message);
+        return {
+            id: data.id,
+            userId: data.profile_id,
+            localDate: data.local_date,
+            prompt: data.prompt,
+            response: data.response,
+            completedAt: data.completed_at,
+            createdAt: data.created_at,
+            updatedAt: data.updated_at,
+        };
     }
 }

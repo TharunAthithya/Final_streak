@@ -19,6 +19,7 @@ export const CreateHabitSchema = z.object({
   targetPerWeek: z.number().int().min(1).max(7).optional(),
   timezone: z.string().min(1, 'Timezone is required'),
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Start date must be in YYYY-MM-DD format'),
+  reminderTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Reminder time must be in HH:MM format').nullable().optional(),
 });
 
 export type CreateHabitDto = z.infer<typeof CreateHabitSchema>;

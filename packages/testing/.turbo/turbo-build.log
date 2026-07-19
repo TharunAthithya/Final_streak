@@ -1,1 +1,4 @@
-$ tsc
+
+> @streak/testing@1.0.0 build D:\Projects\streak\packages\testing
+> tsc
+

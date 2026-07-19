@@ -1,13 +1,14 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { UserResponse, HabitResponse, CheckInResponse, RoomResponse, ActivityResponse } from '@streak/contracts';
+import { UserResponse, HabitResponse, CheckInResponse, RoomResponse, ActivityResponse, ReflectionResponse, CreateReflectionDto } from '@streak/contracts';
 import { CreateHabitDto, CheckInDto, CreateRoomDto, JoinRoomDto, UpdateUserDto } from '@streak/validation';
 export declare class StreakApiClient {
     supabase: SupabaseClient;
-    constructor(supabaseUrl: string, supabaseAnonKey: string);
+    constructor(supabaseUrl: string, supabaseAnonKey: string, options?: any);
     getMe(): Promise<UserResponse>;
     updateProfile(dto: UpdateUserDto): Promise<UserResponse>;
     getHabits(includeArchived?: boolean): Promise<HabitResponse[]>;
     createHabit(dto: CreateHabitDto): Promise<HabitResponse>;
+    getHabitCheckIns(habitId: string, limit?: number): Promise<CheckInResponse[]>;
     deleteHabit(habitId: string): Promise<{
         success: boolean;
     }>;
@@ -63,4 +64,12 @@ export declare class StreakApiClient {
     deleteAccount(): Promise<{
         success: boolean;
     }>;
+    forgotPassword(email: string, redirectTo?: string): Promise<{
+        success: boolean;
+    }>;
+    resetPassword(newPassword: string): Promise<{
+        success: boolean;
+    }>;
+    getReflectionForDate(localDate: string): Promise<ReflectionResponse | null>;
+    submitReflection(dto: CreateReflectionDto): Promise<ReflectionResponse>;
 }
