@@ -27,6 +27,23 @@ export declare class StreakApiClient {
         bestStreak: number;
         totalCompletions: number;
     }>;
+    freezeHabit(habitId: string, dto: CheckInDto): Promise<{
+        checkIn: CheckInResponse;
+        stats: {
+            currentStreak: number;
+            bestStreak: number;
+            totalCompletions: number;
+        };
+        freezeDaysAvailable: number;
+    }>;
+    undoFreeze(habitId: string, checkInId: string): Promise<{
+        stats: {
+            currentStreak: number;
+            bestStreak: number;
+            totalCompletions: number;
+        };
+        freezeDaysAvailable: number;
+    }>;
     getRooms(): Promise<RoomResponse[]>;
     createRoom(dto: CreateRoomDto): Promise<RoomResponse>;
     joinRoom(dto: JoinRoomDto): Promise<RoomResponse>;

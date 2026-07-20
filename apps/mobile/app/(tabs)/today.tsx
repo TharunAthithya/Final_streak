@@ -20,11 +20,13 @@ import NetInfo from '@react-native-community/netinfo';
 import { useHomeHero } from '../../src/hooks/useHomeHero';
 import { useBeforeYouBegin } from '../../src/hooks/useBeforeYouBegin';
 import { isHabitScheduledForDate, getHabitScheduleLabel } from '../../src/utils/streak';
+import { Icon } from '../../src/components/ui/Icon';
+import { calculateCalendarGridStatuses, getCalendarGridDates, validateFreeze } from '../../src/utils/freeze';
 
 export default function TodayScreen() {
   const { apiClient, user } = useAuthStore();
-  const { pendingQueue, enqueueCompleteHabit, syncQueue, isSyncing } = useSyncStore();
-  const { habits, loading, fetchHabits, createHabit, checkInHabit, undoCheckIn } = useHabitStore();
+  const { pendingQueue, enqueueCompleteHabit, syncQueue, isSyncing, enqueueFreezeHabit } = useSyncStore();
+  const { habits, loading, fetchHabits, createHabit, checkInHabit, undoCheckIn, freezeHabit } = useHabitStore();
 
   const [isOfflineMode, setIsOfflineMode] = useState(false);
   const {
@@ -140,6 +142,19 @@ export default function TodayScreen() {
     }
   };
 
+  const handleFreezeHabit = async (habitId: string, targetDate: string) => {
+    const key = `mobile-idemp-freeze-${habitId}-${targetDate}-${Date.now()}`;
+    const tz = user?.timezone || 'UTC';
+    try {
+      await freezeHabit(apiClient, habitId, targetDate, tz, key, isOfflineMode, enqueueFreezeHabit);
+      if (isOfflineMode) {
+        Alert.alert('Offline Mode', 'Freeze enqueued. Will sync when back online.');
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    }
+  };
+
   const handleCreateHabit = async () => {
     if (!habitName.trim()) return;
     try {
@@ -190,8 +205,9 @@ export default function TodayScreen() {
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         {/* Offline Status Banner */}
         {isOfflineMode && (
-          <View className="bg-premiumGoldMuted px-4 py-2 items-center">
-            <Text className="text-xs font-semibold text-premiumGold">⚠️ Offline Mode - Local Queue Active</Text>
+          <View className="bg-premiumGoldMuted px-4 py-2 flex-row justify-center items-center">
+            <Icon name="alert" size={12} color="#C5A880" className="mr-1.5" />
+            <Text className="text-xs font-semibold text-premiumGold">Offline Mode - Local Queue Active</Text>
           </View>
         )}
 
@@ -202,9 +218,12 @@ export default function TodayScreen() {
             disabled={isSyncing}
             className="bg-[#2A2722] px-4 py-3 border-b border-premiumGold flex-row justify-between items-center"
           >
-            <Text className="text-xs font-semibold text-premiumGold">
-              {isSyncing ? 'Syncing...' : `🔄 ${pendingQueue.length} check-ins pending. Tap to force.`}
-            </Text>
+            <View className="flex-row items-center">
+              {!isSyncing && <Icon name="repeat" size={12} color="#C5A880" className="mr-1.5" />}
+              <Text className="text-xs font-semibold text-premiumGold">
+                {isSyncing ? 'Syncing...' : `${pendingQueue.length} check-ins pending. Tap to force.`}
+              </Text>
+            </View>
             {isSyncing && <ActivityIndicator size="small" color="#C5A880" />}
           </TouchableOpacity>
         )}
@@ -222,16 +241,18 @@ export default function TodayScreen() {
           </Text>
           {hasCompletedToday ? (
             <View className="mt-4 flex-row items-center">
+              <Icon name="check" size={16} color="#C5A880" className="mr-1.5" />
               <Text className="text-base text-[#C5A880] font-semibold">
-                ✓ You've started today with intention.
+                You've started today with intention.
               </Text>
             </View>
           ) : (
             <TouchableOpacity onPress={() => setShowRitual(true)} className="mt-4 flex-row items-center">
+              <Icon name="book" size={16} color="white" className="mr-1.5" />
               <Text className="text-base text-white font-medium underline">
-                📖 Before You Begin
+                Before You Begin
               </Text>
-              <Text className="text-base text-white font-medium ml-1">→</Text>
+              <Icon name="arrow-right" size={14} color="white" className="ml-1.5" />
             </TouchableOpacity>
           )}
         </View>
@@ -251,7 +272,7 @@ export default function TodayScreen() {
                 {remainingPromises > 0 ? `${remainingPromises} promises remaining today` : 'All promises kept today!'}
               </Text>
               <View className="flex-row items-center">
-                <Text className="text-sm text-premiumGold mr-1">🔥</Text>
+                <Icon name="streak" size={14} color="#C5A880" className="mr-1.5" />
                 <Text className="text-sm text-premiumGold font-semibold">{globalStreak}-day streak</Text>
               </View>
             </View>
@@ -343,24 +364,32 @@ export default function TodayScreen() {
             <ActivityIndicator size="large" color="#C5A880" className="mt-10" />
           ) : todayHabits.length === 0 ? (
             <View className="bg-premiumSurface border border-[#2B2723] p-8 rounded-2xl items-center mt-4">
-              <Text className="text-3xl mb-2">🌱</Text>
+              <Icon name="book" size={32} color="#C5A880" className="mb-2" />
               <Text className="text-base font-semibold text-white">No habits for today</Text>
               <Text className="text-sm text-premiumTextMuted text-center mt-1">Tap the plus button to create your first habit.</Text>
             </View>
           ) : (
-            todayHabits.map((habit) => (
-              <HabitCard
-                key={habit.id}
-                name={habit.name}
-                iconName={habit.icon || 'habit'}
-                reminderTime={habit.reminderTime}
-                scheduleLabel={getHabitScheduleLabel(habit)}
-                currentStreak={habit.stats?.currentStreak || 0}
-                statuses={getDotStatuses(habit.id, habit.stats?.currentStreak || 0)}
-                completionStatus={(habit as any).completedToday ? 'completed' : 'pending'}
-                onToggleComplete={() => handleToggleCheckIn(habit)}
-              />
-            ))
+            todayHabits.map((habit) => {
+              const gridDates = getCalendarGridDates();
+              const freezableDates = gridDates.filter((d) => validateFreeze(habit, d).valid);
+              return (
+                <HabitCard
+                  key={habit.id}
+                  name={habit.name}
+                  iconName={habit.icon || 'habit'}
+                  reminderTime={habit.reminderTime}
+                  scheduleLabel={getHabitScheduleLabel(habit)}
+                  currentStreak={habit.stats?.currentStreak || 0}
+                  statuses={calculateCalendarGridStatuses(habit)}
+                  completionStatus={(habit as any).completedToday ? 'completed' : 'pending'}
+                  onToggleComplete={() => handleToggleCheckIn(habit)}
+                  freezeDaysAvailable={habit.freezeDaysAvailable}
+                  dates={gridDates}
+                  freezableDates={freezableDates}
+                  onFreeze={(date) => handleFreezeHabit(habit.id, date)}
+                />
+              );
+            })
           )}
         </View>
       </ScrollView>
@@ -468,7 +497,7 @@ export default function TodayScreen() {
               <ActivityIndicator size="large" color="#C5A880" className="mt-10" />
             ) : todayHabits.length === 0 ? (
               <View className="bg-premiumSurface border border-[#2B2723] p-8 rounded-2xl items-center mt-4">
-                <Text className="text-3xl mb-2">🌱</Text>
+                <Icon name="book" size={32} color="#C5A880" className="mb-2" />
                 <Text className="text-base font-semibold text-white">No habits for today</Text>
               </View>
             ) : (
@@ -496,7 +525,7 @@ export default function TodayScreen() {
         onPress={() => setShowCreate(!showCreate)}
         className="absolute bottom-6 right-6 w-14 h-14 bg-premiumGold rounded-full justify-center items-center shadow-lg"
       >
-        <Text className="text-3xl text-premiumBg font-bold">+</Text>
+        <Icon name="plus" size={28} color="#12110E" />
       </TouchableOpacity>
     </View>
   );

@@ -37,6 +37,12 @@ export interface UserResponse {
     onboardingCompletedAt?: string;
     createdAt: string;
 }
+export declare enum DayStatus {
+    COMPLETED = "COMPLETED",
+    FREEZE = "FREEZE",
+    MISSED = "MISSED",
+    NOT_SCHEDULED = "NOT_SCHEDULED"
+}
 export interface HabitResponse {
     id: string;
     userId: string;
@@ -57,7 +63,10 @@ export interface HabitResponse {
     checkIns?: Array<{
         id: string;
         localDate: string;
+        status?: string;
     }>;
+    freezeDaysAvailable: number;
+    lastFreezeReset: string;
 }
 export interface HabitStatsResponse {
     currentStreak: number;
@@ -73,6 +82,7 @@ export interface CheckInResponse {
     completedAtUtc: string;
     timezoneAtCompletion: string;
     source: string;
+    status: string;
 }
 export interface RoomResponse {
     id: string;

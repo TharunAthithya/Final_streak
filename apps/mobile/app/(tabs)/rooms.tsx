@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useAuthStore } from '../../src/store/auth-store';
 import { useRoomStore } from '../../src/store/room-store';
+import { Icon } from '../../src/components/ui/Icon';
 
 export default function RoomsScreen() {
   const { apiClient } = useAuthStore();
@@ -135,9 +136,10 @@ export default function RoomsScreen() {
             onPress={() => {
               setSelectedRoomId(null);
             }}
-            className="px-3 py-2 bg-white border border-[#E6E9E6] rounded-xl"
+            className="px-3 py-2 bg-white border border-[#E6E9E6] rounded-xl flex-row items-center"
           >
-            <Text className="text-[#6B726D] font-semibold">← Back</Text>
+            <Icon name="arrow-left" size={14} color="#6B726D" className="mr-1" />
+            <Text className="text-[#6B726D] font-semibold">Back</Text>
           </TouchableOpacity>
           <Text className="text-xl font-bold text-[#1C211E] flex-1 text-center truncate px-2">{roomDetails.name}</Text>
           <TouchableOpacity
@@ -225,9 +227,11 @@ export default function RoomsScreen() {
               )}
             </View>
 
-            {/* Weekly Leaderboard */}
             <View className="bg-white border border-[#E6E9E6] p-5 rounded-2xl mt-4">
-              <Text className="text-base font-bold text-[#1C211E] mb-4">🏆 Weekly Standings</Text>
+              <View className="flex-row items-center mb-4">
+                <Icon name="trophy" size={16} color="#1C211E" className="mr-1.5" />
+                <Text className="text-base font-bold text-[#1C211E]">Weekly Standings</Text>
+              </View>
               {leaderboard.length === 0 ? (
                 <Text className="text-sm text-[#6B726D]">No leaderboard completions logged yet.</Text>
               ) : (
@@ -334,7 +338,7 @@ export default function RoomsScreen() {
         <ActivityIndicator size="large" color="#256D4A" className="mt-10" />
       ) : rooms.length === 0 ? (
         <View className="bg-white border border-[#E6E9E6] p-8 rounded-2xl items-center mt-4">
-          <Text className="text-3xl mb-2">👥</Text>
+          <Icon name="rooms" size={32} color="#256D4A" className="mb-2" />
           <Text className="text-base font-semibold text-[#1C211E]">No Rooms Joined</Text>
           <Text className="text-sm text-[#6B726D] text-center mt-1">Create a room or ask for an invite code to join others.</Text>
         </View>
@@ -345,7 +349,7 @@ export default function RoomsScreen() {
             onPress={() => setSelectedRoomId(room.id)}
             className="bg-white border border-[#E6E9E6] p-5 rounded-2xl mb-4 shadow-sm"
           >
-            <View className="flex-row justify-between items-start">
+            <View className="flex-row justify-between items-center">
               <View className="flex-1 pr-4">
                 <Text className="text-lg font-bold text-[#1C211E]">{room.name}</Text>
                 {room.description ? (
@@ -353,11 +357,14 @@ export default function RoomsScreen() {
                     {room.description}
                   </Text>
                 ) : null}
-                <Text className="text-xs font-semibold text-[#256D4A] mt-2">
-                  👥 {room.memberCount} active members
-                </Text>
+                <View className="flex-row items-center mt-2">
+                  <Icon name="rooms" size={12} color="#256D4A" className="mr-1" />
+                  <Text className="text-xs font-semibold text-[#256D4A]">
+                    {room.memberCount} active members
+                  </Text>
+                </View>
               </View>
-              <Text className="text-2xl">→</Text>
+              <Icon name="chevron-right" size={20} color="#6B726D" />
             </View>
           </TouchableOpacity>
         ))

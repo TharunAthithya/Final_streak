@@ -8,6 +8,7 @@ import {
   Alert,
 } from 'react-native';
 import { useAuthStore } from '../../src/store/auth-store';
+import { Icon } from '../../src/components/ui/Icon';
 
 export default function ActivityScreen() {
   const { apiClient, user } = useAuthStore();
@@ -119,7 +120,7 @@ export default function ActivityScreen() {
         <ActivityIndicator size="large" color="#256D4A" className="mt-10" />
       ) : activities.length === 0 ? (
         <View className="bg-white border border-[#E6E9E6] p-8 rounded-2xl items-center mt-4">
-          <Text className="text-3xl mb-2">📣</Text>
+          <Icon name="bell" size={32} color="#256D4A" className="mb-2" />
           <Text className="text-base font-semibold text-[#1C211E]">No Activity Yet</Text>
           <Text className="text-sm text-[#6B726D] text-center mt-1">Activities appear here when linked room habits are completed.</Text>
         </View>
@@ -132,7 +133,7 @@ export default function ActivityScreen() {
             {/* Header info */}
             <View className="flex-row items-center mb-3">
               <View className="w-10 h-10 bg-[#E7F2EC] rounded-full items-center justify-center mr-3">
-                <Text className="text-lg">👤</Text>
+                <Icon name="user" size={18} color="#256D4A" />
               </View>
               <View className="flex-1">
                 <Text className="text-sm font-bold text-[#1C211E]">{activity.actorDisplayName}</Text>

@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { useAuthStore } from '../../src/store/auth-store';
+import { Icon } from '../../src/components/ui/Icon';
 
 export default function ProfileScreen() {
   const { user, loading, updateUser, signOut, deleteUserAccount } = useAuthStore();
@@ -68,10 +69,9 @@ export default function ProfileScreen() {
 
   return (
     <ScrollView className="flex-1 bg-[#F8F9F7] p-6">
-      {/* Header Info */}
       <View className="items-center mb-6">
         <View className="w-20 h-20 bg-[#E7F2EC] rounded-full items-center justify-center mb-3">
-          <Text className="text-4xl">👤</Text>
+          <Icon name="user" size={40} color="#256D4A" />
         </View>
         <Text className="text-xl font-bold text-[#1C211E]">{user.displayName}</Text>
         <Text className="text-sm text-[#6B726D]">@{user.username || 'username'}</Text>
@@ -172,18 +172,18 @@ export default function ProfileScreen() {
 
         <TouchableOpacity
           onPress={signOut}
-          className="py-3 border-b border-[#E6E9E6] flex-row justify-between"
+          className="py-3 border-b border-[#E6E9E6] flex-row justify-between items-center"
         >
           <Text className="text-sm font-semibold text-[#6B726D]">Sign Out</Text>
-          <Text className="text-sm text-[#6B726D]">➔</Text>
+          <Icon name="logout" size={16} color="#6B726D" />
         </TouchableOpacity>
 
         <TouchableOpacity
           onPress={handleDelete}
-          className="py-3 flex-row justify-between mt-2"
+          className="py-3 flex-row justify-between items-center mt-2"
         >
           <Text className="text-sm font-semibold text-[#D95C5C]">Delete Account</Text>
-          <Text className="text-sm text-[#D95C5C]">🗑</Text>
+          <Icon name="trash" size={16} color="#D95C5C" />
         </TouchableOpacity>
       </View>
     </ScrollView>

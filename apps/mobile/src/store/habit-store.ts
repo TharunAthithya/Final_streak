@@ -28,6 +28,25 @@ interface HabitState {
     isOffline: boolean,
     enqueueUndo: (habitId: string, localDate: string, timezone: string, idempotencyKey: string, checkInId?: string) => Promise<void>
   ) => Promise<void>;
+  freezeHabit: (
+    apiClient: StreakApiClient,
+    habitId: string,
+    localDate: string,
+    timezone: string,
+    idempotencyKey: string,
+    isOffline: boolean,
+    enqueueFreeze: (habitId: string, localDate: string, timezone: string, idempotencyKey: string) => Promise<void>
+  ) => Promise<void>;
+  undoFreeze: (
+    apiClient: StreakApiClient,
+    habitId: string,
+    checkInId: string,
+    localDate: string,
+    timezone: string,
+    idempotencyKey: string,
+    isOffline: boolean,
+    enqueueUndoFreeze: (habitId: string, localDate: string, timezone: string, idempotencyKey: string, checkInId?: string) => Promise<void>
+  ) => Promise<void>;
 }
 
 export const useHabitStore = create<HabitState>((set, get) => ({
@@ -136,6 +155,81 @@ export const useHabitStore = create<HabitState>((set, get) => ({
         set({ habits: data });
       } catch (e: any) {
         // Rollback optimistic update
+        const data = await apiClient.getHabits();
+        set({ habits: data, error: e.message });
+        throw e;
+      }
+    }
+  },
+
+  freezeHabit: async (apiClient, habitId, localDate, timezone, idempotencyKey, isOffline, enqueueFreeze) => {
+    // Optimistic Update (deduct freeze, add check-in with FREEZE status)
+    set((state) => ({
+      habits: state.habits.map((h) => {
+        if (h.id === habitId) {
+          const stats = h.stats || { currentStreak: 0, bestStreak: 0, totalCompletions: 0, completionRate: 0 };
+          const checkIns = h.checkIns || [];
+          return {
+            ...h,
+            stats: {
+              ...stats,
+              // Streak is preserved / continuation
+            },
+            freezeDaysAvailable: Math.max(0, (h.freezeDaysAvailable ?? 1) - 1),
+            checkIns: [...checkIns, { id: 'temp-id', localDate, status: 'FREEZE' }],
+          };
+        }
+        return h;
+      }),
+    }));
+
+    if (isOffline) {
+      await enqueueFreeze(habitId, localDate, timezone, idempotencyKey);
+    } else {
+      try {
+        await apiClient.freezeHabit(habitId, {
+          localDate,
+          timezoneAtCompletion: timezone,
+          idempotencyKey,
+        });
+        const data = await apiClient.getHabits();
+        set({ habits: data });
+      } catch (e: any) {
+        const data = await apiClient.getHabits();
+        set({ habits: data, error: e.message });
+        throw e;
+      }
+    }
+  },
+
+  undoFreeze: async (apiClient, habitId, checkInId, localDate, timezone, idempotencyKey, isOffline, enqueueUndoFreeze) => {
+    // Optimistic Update (revert freeze)
+    set((state) => ({
+      habits: state.habits.map((h) => {
+        if (h.id === habitId) {
+          const stats = h.stats || { currentStreak: 0, bestStreak: 0, totalCompletions: 0, completionRate: 0 };
+          const checkIns = h.checkIns || [];
+          return {
+            ...h,
+            stats: {
+              ...stats,
+            },
+            freezeDaysAvailable: Math.min(1, (h.freezeDaysAvailable ?? 0) + 1),
+            checkIns: checkIns.filter((c) => c.localDate !== localDate && c.id !== checkInId),
+          };
+        }
+        return h;
+      }),
+    }));
+
+    if (isOffline) {
+      await enqueueUndoFreeze(habitId, localDate, timezone, idempotencyKey, checkInId);
+    } else {
+      try {
+        await apiClient.undoFreeze(habitId, checkInId);
+        const data = await apiClient.getHabits();
+        set({ habits: data });
+      } catch (e: any) {
         const data = await apiClient.getHabits();
         set({ habits: data, error: e.message });
         throw e;

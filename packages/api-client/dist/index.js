@@ -68,7 +68,7 @@ export class StreakApiClient {
         const todayStr = new Date().toISOString().split('T')[0];
         const query = this.supabase
             .from('habits')
-            .select('*, habit_stats(*), check_ins(id, local_date)');
+            .select('*, habit_stats(*), check_ins(id, local_date, status)');
         if (!includeArchived) {
             query.eq('status', 'ACTIVE');
         }
@@ -76,7 +76,7 @@ export class StreakApiClient {
         if (error)
             throw new Error(error.message);
         return (data || []).map((h) => {
-            const todayCheckIn = h.check_ins?.find((c) => c.local_date === todayStr);
+            const todayCheckIn = h.check_ins?.find((c) => c.local_date === todayStr && (!c.status || c.status === 'COMPLETED'));
             const completedToday = !!todayCheckIn;
             const todayCheckInId = todayCheckIn?.id || null;
             return {
@@ -101,7 +101,9 @@ export class StreakApiClient {
                     totalCompletions: h.habit_stats.total_completions,
                     completionRate: Number(h.habit_stats.completion_rate),
                 } : undefined,
-                checkIns: h.check_ins?.map((c) => ({ id: c.id, localDate: c.local_date })) || [],
+                checkIns: h.check_ins?.map((c) => ({ id: c.id, localDate: c.local_date, status: c.status })) || [],
+                freezeDaysAvailable: h.freeze_days_available,
+                lastFreezeReset: h.last_freeze_reset,
             };
         });
     }
@@ -153,6 +155,8 @@ export class StreakApiClient {
             reminderTime: habit.reminder_time,
             archivedAt: habit.archived_at,
             createdAt: habit.created_at,
+            freezeDaysAvailable: habit.freeze_days_available || 1,
+            lastFreezeReset: habit.last_freeze_reset || habit.created_at,
         };
     }
     async getHabitCheckIns(habitId, limit = 14) {
@@ -172,6 +176,7 @@ export class StreakApiClient {
             completedAtUtc: c.completed_at_utc,
             timezoneAtCompletion: c.timezone_at_completion,
             source: c.source,
+            status: c.status || 'COMPLETED',
         }));
     }
     async deleteHabit(habitId) {
@@ -206,6 +211,7 @@ export class StreakApiClient {
                 completedAtUtc: new Date().toISOString(),
                 timezoneAtCompletion: dto.timezoneAtCompletion,
                 source: 'mobile',
+                status: 'COMPLETED',
             },
             stats: {
                 currentStreak: data.stats.currentStreak,
@@ -231,6 +237,58 @@ export class StreakApiClient {
             currentStreak: data.currentStreak,
             bestStreak: data.bestStreak,
             totalCompletions: data.totalCompletions,
+        };
+    }
+    async freezeHabit(habitId, dto) {
+        const { data: { user } } = await this.supabase.auth.getUser();
+        if (!user)
+            throw new Error('Not authenticated');
+        const { data, error } = await this.supabase.rpc('freeze_habit', {
+            p_profile_id: user.id,
+            p_habit_id: habitId,
+            p_local_date: dto.localDate,
+            p_timezone: dto.timezoneAtCompletion,
+            p_idempotency_key: dto.idempotencyKey,
+        });
+        if (error)
+            throw new Error(error.message);
+        return {
+            checkIn: {
+                id: data.checkInId,
+                userId: user.id,
+                habitId,
+                localDate: dto.localDate,
+                completedAtUtc: new Date().toISOString(),
+                timezoneAtCompletion: dto.timezoneAtCompletion,
+                source: 'mobile',
+                status: 'FREEZE',
+            },
+            stats: {
+                currentStreak: data.stats.currentStreak,
+                bestStreak: data.stats.bestStreak,
+                totalCompletions: data.stats.totalCompletions,
+            },
+            freezeDaysAvailable: data.freezeDaysAvailable,
+        };
+    }
+    async undoFreeze(habitId, checkInId) {
+        const { data: { user } } = await this.supabase.auth.getUser();
+        if (!user)
+            throw new Error('Not authenticated');
+        const { data, error } = await this.supabase.rpc('undo_freeze_habit', {
+            p_profile_id: user.id,
+            p_habit_id: habitId,
+            p_check_in_id: checkInId,
+        });
+        if (error)
+            throw new Error(error.message);
+        return {
+            stats: {
+                currentStreak: data.stats.currentStreak,
+                bestStreak: data.stats.bestStreak,
+                totalCompletions: data.stats.totalCompletions,
+            },
+            freezeDaysAvailable: data.freezeDaysAvailable,
         };
     }
     // Rooms CRUD and RPCs

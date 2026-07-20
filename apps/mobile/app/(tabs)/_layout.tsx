@@ -1,7 +1,7 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { Colors } from '@streak/design-tokens';
-import { Text } from 'react-native';
+import { Icon } from '../../src/components/ui/Icon';
 
 export default function TabsLayout() {
   return (
@@ -23,28 +23,28 @@ export default function TabsLayout() {
         name="today"
         options={{
           title: 'Today',
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>✓</Text>,
+          tabBarIcon: ({ color }) => <Icon name="check" size={20} color={color} />,
         }}
       />
       <Tabs.Screen
         name="rooms"
         options={{
           title: 'Rooms',
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>👥</Text>,
+          tabBarIcon: ({ color }) => <Icon name="rooms" size={20} color={color} />,
         }}
       />
       <Tabs.Screen
         name="activity"
         options={{
           title: 'Social Feed',
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>🔥</Text>,
+          tabBarIcon: ({ color }) => <Icon name="feed" size={20} color={color} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'You',
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>👤</Text>,
+          tabBarIcon: ({ color }) => <Icon name="user" size={20} color={color} />,
         }}
       />
     </Tabs>

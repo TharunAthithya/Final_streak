@@ -43,6 +43,13 @@ export interface UserResponse {
   createdAt: string;
 }
 
+export enum DayStatus {
+  COMPLETED = 'COMPLETED',
+  FREEZE = 'FREEZE',
+  MISSED = 'MISSED',
+  NOT_SCHEDULED = 'NOT_SCHEDULED',
+}
+
 export interface HabitResponse {
   id: string;
   userId: string;
@@ -60,7 +67,9 @@ export interface HabitResponse {
   archivedAt?: string;
   createdAt: string;
   stats?: HabitStatsResponse;
-  checkIns?: Array<{ id: string; localDate: string }>;
+  checkIns?: Array<{ id: string; localDate: string; status?: string }>;
+  freezeDaysAvailable: number;
+  lastFreezeReset: string;
 }
 
 export interface HabitStatsResponse {
@@ -78,6 +87,7 @@ export interface CheckInResponse {
   completedAtUtc: string;
   timezoneAtCompletion: string;
   source: string;
+  status: string;
 }
 
 export interface RoomResponse {

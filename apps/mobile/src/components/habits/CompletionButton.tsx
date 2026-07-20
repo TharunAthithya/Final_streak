@@ -1,5 +1,6 @@
 import React from 'react';
-import { TouchableOpacity, View, Text } from 'react-native';
+import { TouchableOpacity } from 'react-native';
+import { Icon } from '../ui/Icon';
 
 interface CompletionButtonProps {
   status: 'pending' | 'completed' | 'disabled';
@@ -32,9 +33,7 @@ export const CompletionButton: React.FC<CompletionButtonProps> = ({
       className={`rounded-full justify-center items-center ${getStyles()}`}
     >
       {status === 'completed' && (
-        <Text style={{ fontSize: size * 0.5 }} className="text-premiumBg font-bold">
-          ✓
-        </Text>
+        <Icon name="check" size={size * 0.5} color="#12110E" />
       )}
     </TouchableOpacity>
   );

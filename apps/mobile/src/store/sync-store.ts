@@ -4,7 +4,7 @@ import { StreakApiClient } from '@streak/api-client';
 
 export interface QueuedRpc {
   id: string;
-  name: 'complete_habit' | 'undo_complete_habit';
+  name: 'complete_habit' | 'undo_complete_habit' | 'freeze_habit' | 'undo_freeze_habit';
   args: {
     habitId: string;
     localDate: string;
@@ -23,6 +23,8 @@ interface SyncState {
   loadQueue: () => Promise<void>;
   enqueueCompleteHabit: (habitId: string, localDate: string, timezone: string, idempotencyKey: string) => Promise<void>;
   enqueueUndoHabit: (habitId: string, localDate: string, timezone: string, idempotencyKey: string, checkInId?: string) => Promise<void>;
+  enqueueFreezeHabit: (habitId: string, localDate: string, timezone: string, idempotencyKey: string) => Promise<void>;
+  enqueueUndoFreeze: (habitId: string, localDate: string, timezone: string, idempotencyKey: string, checkInId?: string) => Promise<void>;
   syncQueue: (apiClient: StreakApiClient) => Promise<void>;
   clearQueue: () => Promise<void>;
 }
@@ -118,6 +120,80 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     }
   },
 
+  enqueueFreezeHabit: async (habitId, localDate, timezone, idempotencyKey) => {
+    const queue = [...get().pendingQueue];
+
+    // Check if there is an active undo_freeze in the queue for this same date. If yes, cancel it out.
+    const matchingUndoIndex = queue.findIndex(
+      (item) =>
+        item.name === 'undo_freeze_habit' &&
+        item.args.habitId === habitId &&
+        item.args.localDate === localDate
+    );
+
+    if (matchingUndoIndex > -1) {
+      // Remove the matching undo and do not enqueue the freeze
+      queue.splice(matchingUndoIndex, 1);
+      set({ pendingQueue: queue });
+      await AsyncStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queue));
+      return;
+    }
+
+    const newRpc: QueuedRpc = {
+      id: Math.random().toString(36).substring(7),
+      name: 'freeze_habit',
+      args: { habitId, localDate, timezone, idempotencyKey },
+      status: 'pending',
+      retryCount: 0,
+    };
+
+    const updatedQueue = [...queue, newRpc];
+    set({ pendingQueue: updatedQueue });
+
+    try {
+      await AsyncStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(updatedQueue));
+    } catch (e) {
+      console.error('Failed to persist offline queue:', e);
+    }
+  },
+
+  enqueueUndoFreeze: async (habitId, localDate, timezone, idempotencyKey, checkInId) => {
+    const queue = [...get().pendingQueue];
+
+    // If the corresponding freeze is still pending in the queue, we can just remove it
+    const matchingFreezeIndex = queue.findIndex(
+      (item) =>
+        item.name === 'freeze_habit' &&
+        item.args.habitId === habitId &&
+        item.args.localDate === localDate
+    );
+
+    if (matchingFreezeIndex > -1) {
+      // Cancel out: remove the pending freeze
+      queue.splice(matchingFreezeIndex, 1);
+      set({ pendingQueue: queue });
+      await AsyncStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queue));
+      return;
+    }
+
+    const newRpc: QueuedRpc = {
+      id: Math.random().toString(36).substring(7),
+      name: 'undo_freeze_habit',
+      args: { habitId, localDate, timezone, idempotencyKey, checkInId },
+      status: 'pending',
+      retryCount: 0,
+    };
+
+    const updatedQueue = [...queue, newRpc];
+    set({ pendingQueue: updatedQueue });
+
+    try {
+      await AsyncStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(updatedQueue));
+    } catch (e) {
+      console.error('Failed to persist offline queue:', e);
+    }
+  },
+
   syncQueue: async (apiClient: StreakApiClient) => {
     if (get().isSyncing) return;
     set({ isSyncing: true });
@@ -163,6 +239,33 @@ export const useSyncStore = create<SyncState>((set, get) => ({
             await apiClient.undoCheckIn(item.args.habitId, cid);
           } else {
             console.warn('Could not undo offline check-in because no server check-in ID was found.');
+          }
+        } else if (item.name === 'freeze_habit') {
+          await apiClient.freezeHabit(item.args.habitId, {
+            localDate: item.args.localDate,
+            timezoneAtCompletion: item.args.timezone,
+            idempotencyKey: item.args.idempotencyKey,
+          });
+        } else if (item.name === 'undo_freeze_habit') {
+          let cid = item.args.checkInId;
+          if (!cid) {
+            const checkIns = await apiClient.supabase
+              .from('check_ins')
+              .select('id')
+              .eq('habit_id', item.args.habitId)
+              .eq('local_date', item.args.localDate)
+              .eq('status', 'FREEZE')
+              .maybeSingle();
+            
+            if (checkIns.data) {
+              cid = checkIns.data.id;
+            }
+          }
+
+          if (cid) {
+            await apiClient.undoFreeze(item.args.habitId, cid);
+          } else {
+            console.warn('Could not undo offline freeze because no server check-in ID was found.');
           }
         }
       } catch (err: any) {

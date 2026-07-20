@@ -103,7 +103,7 @@ export function calculateDailyPromiseProgress(
   for (const habit of habits) {
     if (isHabitScheduledForDate(habit, targetMidnight)) {
       total++;
-      const isCompleted = habit.checkIns?.some((c) => c.localDate === targetDateStr) || false;
+      const isCompleted = habit.checkIns?.some((c) => c.localDate === targetDateStr && (!c.status || c.status === 'COMPLETED')) || false;
       if (isCompleted) {
         completed++;
       }

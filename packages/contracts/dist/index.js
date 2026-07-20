@@ -29,3 +29,10 @@ export var ActivityType;
     ActivityType["ROOM_JOIN"] = "ROOM_JOIN";
     ActivityType["LEVEL_UP"] = "LEVEL_UP";
 })(ActivityType || (ActivityType = {}));
+export var DayStatus;
+(function (DayStatus) {
+    DayStatus["COMPLETED"] = "COMPLETED";
+    DayStatus["FREEZE"] = "FREEZE";
+    DayStatus["MISSED"] = "MISSED";
+    DayStatus["NOT_SCHEDULED"] = "NOT_SCHEDULED";
+})(DayStatus || (DayStatus = {}));
