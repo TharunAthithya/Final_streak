@@ -169,3 +169,69 @@ export function calculateGlobalStreak(
 
   return streak;
 }
+
+/**
+ * Augments the fetched habits array with any pending actions from the sync queue.
+ * Ensures the UI and progress calculations remain correct and consistent in offline/sync states.
+ */
+export function getSyncAwareHabits(habits: HabitResponse[], pendingQueue: any[]): HabitResponse[] {
+  if (!pendingQueue || pendingQueue.length === 0) return habits;
+
+  return habits.map((habit) => {
+    // Find all queued RPCs for this habit
+    const rpcs = pendingQueue.filter((item) => item.args?.habitId === habit.id);
+    if (rpcs.length === 0) return habit;
+
+    // Start with a clone of checkIns
+    let checkIns = [...(habit.checkIns || [])];
+    let completedToday = !!habit.completedToday;
+    let todayCheckInId = habit.todayCheckInId;
+
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // Apply RPCs sequentially in queue order
+    for (const rpc of rpcs) {
+      const dateStr = rpc.args.localDate;
+      const isForToday = dateStr === todayStr;
+
+      if (rpc.name === 'complete_habit') {
+        // Add check-in if not present
+        if (!checkIns.some((c) => c.localDate === dateStr)) {
+          checkIns.push({
+            id: rpc.id, // temporary id
+            localDate: dateStr,
+            status: 'COMPLETED'
+          } as any);
+        }
+        if (isForToday) {
+          completedToday = true;
+          todayCheckInId = rpc.id;
+        }
+      } else if (rpc.name === 'undo_complete_habit') {
+        // Remove check-in
+        checkIns = checkIns.filter((c) => c.localDate !== dateStr);
+        if (isForToday) {
+          completedToday = false;
+          todayCheckInId = undefined;
+        }
+      } else if (rpc.name === 'freeze_habit') {
+        // Add freeze check-in
+        checkIns = checkIns.filter((c) => c.localDate !== dateStr);
+        checkIns.push({
+          id: rpc.id,
+          localDate: dateStr,
+          status: 'FREEZE'
+        } as any);
+      } else if (rpc.name === 'undo_freeze_habit') {
+        checkIns = checkIns.filter((c) => c.localDate !== dateStr);
+      }
+    }
+
+    return {
+      ...habit,
+      checkIns,
+      completedToday,
+      todayCheckInId,
+    };
+  });
+}

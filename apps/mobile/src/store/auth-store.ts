@@ -171,6 +171,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (error) throw error;
       if (!data.session) throw new Error('No session returned');
 
+      await client.supabase.auth.setSession({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      });
+
       const profile = await client.getMe();
       await AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile));
       
@@ -201,6 +206,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (!data.session) {
         throw new Error('Verification email sent! Please check your inbox.');
       }
+
+      await client.supabase.auth.setSession({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      });
 
       const profile = await client.getMe();
       await AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile));

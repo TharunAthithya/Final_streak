@@ -30,30 +30,57 @@ export const HABIT_KEYWORD_MAP: Record<string, string> = {
 };
 
 // Fallback icon when no keyword or override matches
-export const DEFAULT_HABIT_ICON = 'checkbox-marked-circle-outline';
+export const DEFAULT_HABIT_ICON = 'target';
 
 // Available icons for manual selection in Icon Picker
 export const AVAILABLE_HABIT_ICONS = [
-  { name: 'book-open-variant', label: 'Reading' },
-  { name: 'water', label: 'Water' },
-  { name: 'code-tags', label: 'Coding' },
-  { name: 'run', label: 'Exercise' },
-  { name: 'meditation', label: 'Meditation' },
-  { name: 'moon-waning-crescent', label: 'Sleep' },
-  { name: 'notebook-outline', label: 'Journaling' },
-  { name: 'school-outline', label: 'Studying' },
-  { name: 'dumbbell', label: 'Gym' },
-  { name: 'heart-pulse', label: 'Health' },
-  { name: 'food-apple-outline', label: 'Nutrition' },
-  { name: 'cup-water', label: 'Hydration' },
-  { name: 'coffee', label: 'Coffee' },
-  { name: 'music-note', label: 'Music' },
-  { name: 'image-outline', label: 'Art' },
-  { name: 'calculator', label: 'Math' },
-  { name: 'cash', label: 'Finance' },
-  { name: 'briefcase-outline', label: 'Work' },
-  { name: 'home-outline', label: 'Chores' },
-  { name: 'checkbox-marked-circle-outline', label: 'General' },
+  // Learning & Mind
+  { name: 'book-open-variant', label: 'Reading', category: 'Mind & Study' },
+  { name: 'notebook-outline', label: 'Journaling', category: 'Mind & Study' },
+  { name: 'school-outline', label: 'Studying', category: 'Mind & Study' },
+  { name: 'brain', label: 'Brain', category: 'Mind & Study' },
+  { name: 'pencil-outline', label: 'Writing', category: 'Mind & Study' },
+  
+  // Fitness & Health
+  { name: 'dumbbell', label: 'Gym', category: 'Fitness & Health' },
+  { name: 'run', label: 'Running', category: 'Fitness & Health' },
+  { name: 'heart-pulse', label: 'Heart', category: 'Fitness & Health' },
+  { name: 'food-apple-outline', label: 'Nutrition', category: 'Fitness & Health' },
+  { name: 'water', label: 'Water', category: 'Fitness & Health' },
+  { name: 'bike', label: 'Bicycle', category: 'Fitness & Health' },
+
+  // Wellness
+  { name: 'meditation', label: 'Meditation', category: 'Wellness' },
+  { name: 'moon-waning-crescent', label: 'Sleep', category: 'Wellness' },
+  { name: 'bed-outline', label: 'Bed', category: 'Wellness' },
+  { name: 'leaf', label: 'Nature', category: 'Wellness' },
+  { name: 'coffee', label: 'Coffee', category: 'Wellness' },
+  { name: 'cup-water', label: 'Hydration', category: 'Wellness' },
+
+  // Productivity
+  { name: 'laptop', label: 'Laptop', category: 'Productivity' },
+  { name: 'code-tags', label: 'Coding', category: 'Productivity' },
+  { name: 'briefcase-outline', label: 'Work', category: 'Productivity' },
+  { name: 'clock-outline', label: 'Clock', category: 'Productivity' },
+  { name: 'calendar-outline', label: 'Calendar', category: 'Productivity' },
+  { name: 'target', label: 'Target', category: 'Productivity' },
+
+  // Home
+  { name: 'home-outline', label: 'Home', category: 'Home & Chores' },
+  { name: 'flower-outline', label: 'Plant', category: 'Home & Chores' },
+  { name: 'broom', label: 'Cleaning', category: 'Home & Chores' },
+  { name: 'pot-mix-outline', label: 'Cooking', category: 'Home & Chores' },
+
+  // Creativity
+  { name: 'music-note', label: 'Music', category: 'Creativity' },
+  { name: 'palette-outline', label: 'Art', category: 'Creativity' },
+  { name: 'camera-outline', label: 'Camera', category: 'Creativity' },
+  { name: 'guitar-acoustic', label: 'Guitar', category: 'Creativity' },
+
+  // Finance
+  { name: 'wallet-outline', label: 'Wallet', category: 'Finance' },
+  { name: 'calculator', label: 'Calculator', category: 'Finance' },
+  { name: 'cash', label: 'Finance', category: 'Finance' },
 ];
 
 /**

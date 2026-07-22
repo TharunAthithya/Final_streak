@@ -16,6 +16,13 @@ export const RecentSessionsStrip: React.FC<RecentSessionsStripProps> = ({
   freezableDates = [],
   onPressDot,
 }) => {
+  // Get today's local date string (YYYY-MM-DD)
+  const todayObj = new Date();
+  const yyyy = todayObj.getFullYear();
+  const mm = String(todayObj.getMonth() + 1).padStart(2, '0');
+  const dd = String(todayObj.getDate()).padStart(2, '0');
+  const todayStr = `${yyyy}-${mm}-${dd}`;
+
   // Ensure we have exactly 14 statuses
   const items = [...statuses];
   while (items.length < 14) {
@@ -28,27 +35,68 @@ export const RecentSessionsStrip: React.FC<RecentSessionsStripProps> = ({
   const row2 = paddedItems.slice(7, 14);
 
   const renderDot = (status: SessionStatus, cellIndex: number) => {
-    let dotStyle = 'rounded-full';
-    switch (status) {
-      case 'completed':
-        dotStyle += ' w-2.5 h-2.5 bg-[#E8C08A]';
-        break;
-      case 'freeze':
-        dotStyle += ' w-2.5 h-2.5 bg-slate-500';
-        break;
-      case 'missed':
-        dotStyle += ' w-2.5 h-2.5 bg-[#E8899A]';
-        break;
-      case 'not_scheduled':
-        dotStyle += ' w-1.5 h-1.5 bg-[#221C16] border border-[#3A2E1F]';
-        break;
-      case 'pending':
-      default:
-        dotStyle += ' w-2 h-2 border border-[#65605A] bg-transparent';
-        break;
+    const dateStr = dates[cellIndex];
+    const isToday = dates && dateStr && dateStr === todayStr;
+    const isFuture = dates && dateStr && dateStr > todayStr;
+
+    if (isToday) {
+      let outerBorderColor = 'border-[#65605A]';
+      let innerBgColor = 'bg-transparent';
+      let innerBorderColor = 'border-[#65605A]';
+
+      if (status === 'completed') {
+        outerBorderColor = 'border-[#E8C08A]';
+        innerBgColor = 'bg-[#E8C08A]';
+        innerBorderColor = 'border-[#E8C08A]';
+      } else if (status === 'freeze') {
+        outerBorderColor = 'border-slate-500';
+        innerBgColor = 'bg-slate-500';
+        innerBorderColor = 'border-slate-500';
+      } else if (status === 'missed') {
+        outerBorderColor = 'border-[#E8899A]';
+        innerBgColor = 'bg-[#E8899A]';
+        innerBorderColor = 'border-[#E8899A]';
+      } else if (status === 'not_scheduled') {
+        return (
+          <View key={cellIndex} className="w-6 h-6 justify-center items-center">
+            <View className="w-1.5 h-1.5 rounded-full bg-[#221C16] border border-[#3A2E1F]" />
+          </View>
+        );
+      }
+
+      return (
+        <View key={cellIndex} className="w-6 h-6 justify-center items-center">
+          <View className={`w-4 h-4 rounded-full border ${outerBorderColor} justify-center items-center`}>
+            <View className={`w-1.5 h-1.5 rounded-full ${innerBgColor} border ${innerBorderColor}`} />
+          </View>
+        </View>
+      );
     }
 
-    const dateStr = dates[cellIndex];
+    let dotStyle = 'rounded-full';
+    if (isFuture) {
+      dotStyle += ' w-2 h-2 bg-[#1C1816] border border-[#2B2521]';
+    } else {
+      switch (status) {
+        case 'completed':
+          dotStyle += ' w-2.5 h-2.5 bg-[#E8C08A]';
+          break;
+        case 'freeze':
+          dotStyle += ' w-2.5 h-2.5 bg-slate-500';
+          break;
+        case 'missed':
+          dotStyle += ' w-2.5 h-2.5 bg-[#E8899A]';
+          break;
+        case 'not_scheduled':
+          dotStyle += ' w-1.5 h-1.5 bg-[#221C16] border border-[#3A2E1F]';
+          break;
+        case 'pending':
+        default:
+          dotStyle += ' w-2 h-2 border border-[#65605A] bg-transparent';
+          break;
+      }
+    }
+
     const isFreezable = dateStr && freezableDates.includes(dateStr) && onPressDot;
 
     if (isFreezable) {

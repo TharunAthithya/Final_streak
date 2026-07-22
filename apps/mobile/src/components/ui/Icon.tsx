@@ -39,6 +39,8 @@ const featherIconMap: Record<string, keyof typeof Feather.glyphMap> = {
   settings: 'settings',
   add: 'plus',
   plus: 'plus',
+  close: 'x',
+  x: 'x',
   'chevron-right': 'chevron-right',
   'chevron-left': 'chevron-left',
   bell: 'bell',

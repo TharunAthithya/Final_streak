@@ -16,6 +16,7 @@ import { useHabitStore } from '../../src/store/habit-store';
 import { useNotificationStore } from '../../src/store/notification-store';
 import { HabitCard } from '../../src/components/habits/HabitCard';
 import { HabitDetailModal } from '../../src/components/habits/HabitDetailModal';
+import { CreateHabitBottomSheet } from '../../src/components/habits/CreateHabitBottomSheet';
 import { NotificationBell } from '../../src/components/ui/NotificationBell';
 import { NotificationScreen } from '../../src/components/ui/NotificationScreen';
 import { ProgressRing } from '../../src/components/habits/ProgressRing';
@@ -23,7 +24,7 @@ import { SessionStatus } from '../../src/components/habits/RecentSessionsStrip';
 import NetInfo from '@react-native-community/netinfo';
 import { useHomeHero } from '../../src/hooks/useHomeHero';
 import { useBeforeYouBegin } from '../../src/hooks/useBeforeYouBegin';
-import { isHabitScheduledForDate, getHabitScheduleLabel } from '../../src/utils/streak';
+import { isHabitScheduledForDate, getHabitScheduleLabel, getSyncAwareHabits } from '../../src/utils/streak';
 import { Icon } from '../../src/components/ui/Icon';
 import { calculateCalendarGridStatuses, getCalendarGridDates, validateFreeze } from '../../src/utils/freeze';
 import { resolveHabitIcon } from '../../src/utils/habit-icons';
@@ -69,10 +70,6 @@ export default function TodayScreen() {
 
   // Habit creation form state
   const [showCreate, setShowCreate] = useState(false);
-  const [habitName, setHabitName] = useState('');
-  const [habitDesc, setHabitDesc] = useState('');
-  const [scheduleType, setScheduleType] = useState<'DAILY' | 'SPECIFIC_DAYS'>('DAILY');
-  const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4, 5]);
 
   useEffect(() => {
     fetchHabits(apiClient);
@@ -112,7 +109,8 @@ export default function TodayScreen() {
 
   // Filter habits scheduled for today
   const todayStr = new Date().toISOString().split('T')[0];
-  const todayHabits = habits.filter((h) => isHabitScheduledForDate(h, todayStr));
+  const syncAwareHabits = getSyncAwareHabits(habits, pendingQueue);
+  const todayHabits = syncAwareHabits.filter((h) => isHabitScheduledForDate(h, todayStr));
 
   const handleToggleCheckIn = async (habit: any) => {
     const isCompleted = (habit as any).completedToday;
@@ -162,26 +160,26 @@ export default function TodayScreen() {
     }
   };
 
-  const handleCreateHabit = async () => {
-    if (!habitName.trim()) return;
+  const handleCreateHabit = async (habitData: {
+    name: string;
+    description?: string;
+    icon: string;
+    scheduleType: 'DAILY' | 'SPECIFIC_DAYS';
+    daysOfWeek?: number[];
+  }) => {
     try {
-      // Auto-resolve icon based on habit name
-      const resolvedIcon = resolveHabitIcon(habitName.trim());
-
       await createHabit(apiClient, {
-        name: habitName.trim(),
-        description: habitDesc.trim() || undefined,
-        icon: resolvedIcon,
-        scheduleType: scheduleType,
-        daysOfWeek: scheduleType === 'SPECIFIC_DAYS' ? selectedDays : undefined,
+        name: habitData.name.trim(),
+        description: habitData.description?.trim() || undefined,
+        icon: habitData.icon,
+        scheduleType: habitData.scheduleType,
+        daysOfWeek: habitData.scheduleType === 'SPECIFIC_DAYS' ? habitData.daysOfWeek : undefined,
         timezone: user?.timezone || 'UTC',
         startDate: new Date().toISOString().split('T')[0],
       });
-      setHabitName('');
-      setHabitDesc('');
       setShowCreate(false);
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      Alert.alert('Error', e.message || 'Failed to create habit');
     }
   };
 
@@ -199,14 +197,6 @@ export default function TodayScreen() {
       });
     }
     await fetchHabits(apiClient);
-  };
-
-  const toggleDaySelection = (day: number) => {
-    if (selectedDays.includes(day)) {
-      setSelectedDays((prev) => prev.filter((d) => d !== day));
-    } else {
-      setSelectedDays((prev) => [...prev, day]);
-    }
   };
 
   // Helper to generate dot statuses based on streak
@@ -325,73 +315,7 @@ export default function TodayScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Create Habit Collapsible Form */}
-          {showCreate && (
-            <View className="p-5 bg-[#181513] border border-[#2B2521] rounded-2xl mb-6 shadow-sm">
-              <Text className="text-base font-bold text-[#F5F2EC] mb-4">New Habit</Text>
 
-              <Text className="text-xs font-semibold text-[#65605A] uppercase tracking-wider mb-2">Habit Name</Text>
-              <TextInput
-                value={habitName}
-                onChangeText={setHabitName}
-                placeholder="e.g. 30m Coding, Water, Reading"
-                placeholderTextColor="#65605A"
-                className="px-4 py-3 border border-[#2B2521] text-[#F5F2EC] rounded-xl mb-4 bg-[#0B0B0C]"
-              />
-
-              <Text className="text-xs font-semibold text-[#65605A] uppercase tracking-wider mb-2">Description</Text>
-              <TextInput
-                value={habitDesc}
-                onChangeText={setHabitDesc}
-                placeholder="Optional description"
-                placeholderTextColor="#65605A"
-                className="px-4 py-3 border border-[#2B2521] text-[#F5F2EC] rounded-xl mb-4 bg-[#0B0B0C]"
-              />
-
-              <Text className="text-xs font-semibold text-[#65605A] uppercase tracking-wider mb-2">Schedule Type</Text>
-              <View className="flex-row mb-4">
-                <TouchableOpacity
-                  onPress={() => setScheduleType('DAILY')}
-                  className={`flex-1 py-3 items-center rounded-xl mr-2 ${scheduleType === 'DAILY' ? 'bg-[#E8C08A]' : 'bg-[#3A2E1F]'}`}
-                >
-                  <Text className={`font-semibold text-xs ${scheduleType === 'DAILY' ? 'text-[#241C14]' : 'text-[#9C958C]'}`}>Daily</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setScheduleType('SPECIFIC_DAYS')}
-                  className={`flex-1 py-3 items-center rounded-xl ml-2 ${scheduleType === 'SPECIFIC_DAYS' ? 'bg-[#E8C08A]' : 'bg-[#3A2E1F]'}`}
-                >
-                  <Text className={`font-semibold text-xs ${scheduleType === 'SPECIFIC_DAYS' ? 'text-[#241C14]' : 'text-[#9C958C]'}`}>Specific Days</Text>
-                </TouchableOpacity>
-              </View>
-
-              {scheduleType === 'SPECIFIC_DAYS' && (
-                <View className="mb-4">
-                  <Text className="text-xs font-semibold text-[#65605A] uppercase tracking-wider mb-2">Days of Week</Text>
-                  <View className="flex-row justify-between">
-                    {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, idx) => {
-                      const isSelected = selectedDays.includes(idx);
-                      return (
-                        <TouchableOpacity
-                          key={idx}
-                          onPress={() => toggleDaySelection(idx)}
-                          className={`w-9 h-9 rounded-full items-center justify-center ${isSelected ? 'bg-[#E8C08A]' : 'bg-[#2B2521]'}`}
-                        >
-                          <Text className={`text-xs font-semibold ${isSelected ? 'text-[#241C14]' : 'text-[#9C958C]'}`}>{day}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-              )}
-
-              <TouchableOpacity
-                onPress={handleCreateHabit}
-                className="bg-[#E8C08A] py-3.5 rounded-xl items-center"
-              >
-                <Text className="text-[#241C14] font-bold text-sm">Save Habit</Text>
-              </TouchableOpacity>
-            </View>
-          )}
 
           {loading ? (
             <ActivityIndicator size="large" color="#E8C08A" className="mt-10" />
@@ -574,6 +498,14 @@ export default function TodayScreen() {
           </ScrollView>
         </View>
       </Modal>
+
+      {/* Create Habit Bottom Sheet */}
+      <CreateHabitBottomSheet
+        visible={showCreate}
+        onClose={() => setShowCreate(false)}
+        onCreate={handleCreateHabit}
+        loading={loading}
+      />
 
       {/* FAB Plus Button */}
       <TouchableOpacity
