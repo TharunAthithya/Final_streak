@@ -14,13 +14,31 @@ export class StreakApiClient {
     const { data: { user } } = await this.supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    const { data, error } = await this.supabase
+    let { data, error } = await this.supabase
       .from('profiles')
       .select('*')
       .eq('id', user.id)
-      .single();
+      .maybeSingle();
 
     if (error) throw new Error(error.message);
+
+    if (!data) {
+      // Auto-create missing profile row if user exists in Supabase Auth
+      const defaultName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'User';
+      const defaultUsername = user.user_metadata?.username || `user_${user.id.substring(0, 8)}`;
+      const { data: newProfile, error: createErr } = await this.supabase
+        .from('profiles')
+        .insert({
+          id: user.id,
+          display_name: defaultName,
+          username: defaultUsername,
+        })
+        .select('*')
+        .single();
+
+      if (createErr) throw new Error(createErr.message);
+      data = newProfile;
+    }
 
     return {
       id: data.id,
@@ -77,7 +95,7 @@ export class StreakApiClient {
     const todayStr = new Date().toISOString().split('T')[0];
     const query = this.supabase
       .from('habits')
-      .select('*, habit_stats(*), check_ins(id, local_date, status)');
+      .select('*, habit_stats(*), check_ins(id, local_date)');
 
     if (!includeArchived) {
       query.eq('status', 'ACTIVE');
@@ -87,7 +105,7 @@ export class StreakApiClient {
     if (error) throw new Error(error.message);
 
     return (data || []).map((h: any) => {
-      const todayCheckIn = h.check_ins?.find((c: any) => c.local_date === todayStr && (!c.status || c.status === 'COMPLETED'));
+      const todayCheckIn = h.check_ins?.find((c: any) => c.local_date === todayStr);
       const completedToday = !!todayCheckIn;
       const todayCheckInId = todayCheckIn?.id || null;
       return {
@@ -112,7 +130,7 @@ export class StreakApiClient {
           totalCompletions: h.habit_stats.total_completions,
           completionRate: Number(h.habit_stats.completion_rate),
         } : undefined,
-        checkIns: h.check_ins?.map((c: any) => ({ id: c.id, localDate: c.local_date, status: c.status })) || [],
+        checkIns: h.check_ins?.map((c: any) => ({ id: c.id, localDate: c.local_date, status: 'COMPLETED' })) || [],
         freezeDaysAvailable: h.freeze_days_available,
         lastFreezeReset: h.last_freeze_reset,
       };
@@ -197,13 +215,21 @@ export class StreakApiClient {
   }
 
   async deleteHabit(habitId: string): Promise<{ success: boolean }> {
-    const { error } = await this.supabase
-      .from('habits')
-      .delete()
-      .eq('id', habitId);
+    try {
+      const { error } = await this.supabase.rpc('delete_habit', {
+        p_habit_id: habitId,
+      });
+      if (error) throw error;
+      return { success: true };
+    } catch (rpcError) {
+      const { error } = await this.supabase
+        .from('habits')
+        .delete()
+        .eq('id', habitId);
 
-    if (error) throw new Error(error.message);
-    return { success: true };
+      if (error) throw new Error(error.message);
+      return { success: true };
+    }
   }
 
   // Complex Operations via Direct RPC Database Calls
@@ -335,10 +361,27 @@ export class StreakApiClient {
 
   // Rooms CRUD and RPCs
   async getRooms(): Promise<RoomResponse[]> {
+    const { data: { user } } = await this.supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    // Fetch active room memberships for current user
+    const { data: memberRows, error: memErr } = await this.supabase
+      .from('room_members')
+      .select('room_id')
+      .eq('profile_id', user.id)
+      .is('left_at', null);
+
+    if (memErr) throw new Error(memErr.message);
+
+    const roomIds = (memberRows || []).map((m: any) => m.room_id);
+    if (roomIds.length === 0) return [];
+
     const { data, error } = await this.supabase
       .from('rooms')
       .select('*, room_members(count)')
-      .is('archived_at', null);
+      .in('id', roomIds)
+      .is('archived_at', null)
+      .order('created_at', { ascending: false });
 
     if (error) throw new Error(error.message);
 
@@ -380,36 +423,29 @@ export class StreakApiClient {
     };
   }
 
-  async joinRoom(dto: JoinRoomDto): Promise<RoomResponse> {
+  async joinRoom(dto: JoinRoomDto): Promise<RoomResponse & { requestSent?: boolean; roomName?: string }> {
     const { data: { user } } = await this.supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    const { data, error } = await this.supabase.rpc('join_room', {
-      p_profile_id: user.id,
-      p_invite_code: dto.inviteCode,
+    const cleanCode = dto.inviteCode.trim().toUpperCase();
+
+    const { data, error } = await this.supabase.rpc('join_room_by_code', {
+      p_invite_code: cleanCode,
     });
 
     if (error) throw new Error(error.message);
 
-    // Fetch joined room info
-    const { data: room, error: roomErr } = await this.supabase
-      .from('rooms')
-      .select('*')
-      .eq('id', data.roomId)
-      .single();
-
-    if (roomErr) throw new Error(roomErr.message);
-
     return {
-      id: room.id,
-      ownerId: room.owner_id,
-      name: room.name,
-      description: room.description,
-      imagePath: room.image_url,
-      visibility: room.visibility as RoomVisibility,
-      inviteCode: room.invite_code,
-      memberCount: 0,
+      id: data.roomId || '',
+      ownerId: '',
+      name: data.roomName || '',
+      description: undefined,
+      visibility: 'PUBLIC' as RoomVisibility,
+      inviteCode: cleanCode,
+      memberCount: data.joined ? 1 : 0,
       activeTodayCount: 0,
+      requestSent: !!data.requestSent,
+      roomName: data.roomName,
     };
   }
 
@@ -439,21 +475,23 @@ export class StreakApiClient {
 
     if (roomErr) throw new Error(roomErr.message);
 
-    const members = (room.room_members || []).map((m: any) => ({
-      id: m.id,
-      role: m.role,
-      user: {
-        id: m.profiles.id,
-        displayName: m.profiles.display_name,
-        username: m.profiles.username,
-        avatarPath: m.profiles.avatar_url,
-        bio: m.profiles.bio,
-        timezone: m.profiles.timezone,
-        xp: m.profiles.xp,
-        level: m.profiles.level,
-        created_at: m.profiles.created_at,
-      },
-    }));
+    const members = (room.room_members || [])
+      .filter((m: any) => !m.left_at)
+      .map((m: any) => ({
+        id: m.id,
+        role: m.role,
+        user: {
+          id: m.profiles?.id || m.profile_id,
+          displayName: m.profiles?.display_name || 'Member',
+          username: m.profiles?.username || 'user',
+          avatarPath: m.profiles?.avatar_url,
+          bio: m.profiles?.bio,
+          timezone: m.profiles?.timezone || 'UTC',
+          xp: m.profiles?.xp || 0,
+          level: m.profiles?.level || 1,
+          created_at: m.profiles?.created_at,
+        },
+      }));
 
     const roomHabits = (room.room_habits || []).filter((h: any) => !h.archived_at).map((h: any) => ({
       id: h.id,
@@ -563,47 +601,88 @@ export class StreakApiClient {
     return data;
   }
 
-  async getRoomActivity(roomId: string): Promise<ActivityResponse[]> {
+  async getRoomActivity(roomId: string): Promise<any[]> {
     const { data: { user } } = await this.supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
     const { data, error } = await this.supabase
       .from('activities')
-      .select('*, profiles(*), reactions(*)')
+      .select('*, profiles(display_name, avatar_url), room_activity_reactions(reaction_type, profile_id)')
       .eq('room_id', roomId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: true }); // Oldest first for chat feed
 
     if (error) throw new Error(error.message);
 
     return (data || []).map((a: any) => {
-      const counts: Record<string, number> = {};
-      const usersReacted = new Set<string>();
+      const reactionsMap: Record<string, { count: number; active: boolean }> = {
+        heart: { count: 0, active: false },
+        fire: { count: 0, active: false },
+        thumb: { count: 0, active: false },
+      };
 
-      (a.reactions || []).forEach((r: any) => {
-        counts[r.type] = (counts[r.type] || 0) + 1;
-        if (r.profile_id === user.id) {
-          usersReacted.add(r.type);
+      (a.room_activity_reactions || []).forEach((r: any) => {
+        const type = r.reaction_type;
+        if (reactionsMap[type]) {
+          reactionsMap[type].count += 1;
+          if (r.profile_id === user.id) {
+            reactionsMap[type].active = true;
+          }
         }
       });
 
       return {
         id: a.id,
         actorUserId: a.actor_profile_id,
-        actorDisplayName: a.profiles.display_name,
-        actorAvatarPath: a.profiles.avatar_url,
+        actorDisplayName: a.profiles?.display_name || 'Member',
+        actorAvatarPath: a.profiles?.avatar_url,
         roomId: a.room_id,
-        habitId: undefined,
-        type: a.type as ActivityType,
+        type: a.type,
         message: a.message,
-        metadataJson: a.metadata_json,
         createdAt: a.created_at,
-        reactions: Object.keys(counts).map((type) => ({
-          type,
-          count: counts[type],
-          userReacted: usersReacted.has(type),
-        })),
+        isOwn: a.actor_profile_id === user.id,
+        reactions: reactionsMap,
       };
     });
+  }
+
+  async toggleActivityReaction(activityId: string, reactionType: string): Promise<any> {
+    const { data, error } = await this.supabase.rpc('toggle_activity_reaction', {
+      p_activity_id: activityId,
+      p_reaction_type: reactionType,
+    });
+
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  async getRoomMembers(roomId: string): Promise<Array<{
+    profileId: string;
+    displayName: string;
+    username: string;
+    role: string;
+    joinedAt: string;
+    isYou: boolean;
+  }>> {
+    const { data: { user } } = await this.supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { data, error } = await this.supabase
+      .from('room_members')
+      .select('profile_id, role, joined_at, profiles(display_name, username)')
+      .eq('room_id', roomId)
+      .is('left_at', null)
+      .order('joined_at', { ascending: true });
+
+    if (error) throw new Error(error.message);
+
+    return (data || []).map((m: any) => ({
+      profileId: m.profile_id,
+      displayName: m.profiles?.display_name || 'Member',
+      username: m.profiles?.username || 'user',
+      role: m.role,
+      joinedAt: m.joined_at,
+      isYou: m.profile_id === user.id,
+    }));
   }
 
   async getRoomLeaderboard(roomId: string, period = 'weekly'): Promise<Array<{
@@ -751,4 +830,106 @@ export class StreakApiClient {
       updatedAt: data.updated_at,
     };
   }
+
+  // Update Habit Icon
+  async updateHabitIcon(habitId: string, iconName: string): Promise<any> {
+    const { data, error } = await this.supabase
+      .from('habits')
+      .update({ icon: iconName, updated_at: new Date().toISOString() })
+      .eq('id', habitId)
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  // In-App Notifications & Room Invitations
+  async getNotifications(): Promise<any[]> {
+    const { data: { user } } = await this.supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { data, error } = await this.supabase
+      .from('in_app_notifications')
+      .select('*')
+      .eq('profile_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('In-app notifications table might not exist yet:', error.message);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  async markNotificationRead(notificationId: string): Promise<boolean> {
+    const { error } = await this.supabase
+      .from('in_app_notifications')
+      .update({ is_read: true })
+      .eq('id', notificationId);
+
+    if (error) throw new Error(error.message);
+    return true;
+  }
+
+  async markAllNotificationsRead(): Promise<boolean> {
+    const { data: { user } } = await this.supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { error } = await this.supabase
+      .from('in_app_notifications')
+      .update({ is_read: true })
+      .eq('profile_id', user.id);
+
+    if (error) throw new Error(error.message);
+    return true;
+  }
+
+  async respondToInvitation(invitationId: string, accept: boolean): Promise<boolean> {
+    const { data, error } = await this.supabase.rpc('respond_to_invitation', {
+      p_invitation_id: invitationId,
+      p_accept: accept,
+    });
+
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  // Search users by username (for Option A: direct invite)
+  async searchUsersByUsername(query: string): Promise<Array<{ id: string; displayName: string; username: string; avatarPath?: string }>> {
+    if (!query || query.trim().length < 2) return [];
+
+    const cleanQuery = query.replace('@', '').trim().toLowerCase();
+
+    const { data, error } = await this.supabase
+      .from('profiles')
+      .select('id, display_name, username, avatar_url')
+      .ilike('username', `${cleanQuery}%`)
+      .limit(10);
+
+    if (error) {
+      console.warn('User search error:', error.message);
+      return [];
+    }
+
+    return (data || []).map((p: any) => ({
+      id: p.id,
+      displayName: p.display_name,
+      username: p.username,
+      avatarPath: p.avatar_url,
+    }));
+  }
+
+  // Send direct room invitation (Option A)
+  async sendRoomInvitation(roomId: string, inviteeId: string): Promise<{ invitationId: string; success: boolean }> {
+    const { data, error } = await this.supabase.rpc('send_room_invitation', {
+      p_room_id: roomId,
+      p_invitee_id: inviteeId,
+    });
+
+    if (error) throw new Error(error.message);
+    return data;
+  }
 }
+

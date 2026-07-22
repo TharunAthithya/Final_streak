@@ -24,6 +24,11 @@ export declare enum ActivityType {
     ROOM_JOIN = "ROOM_JOIN",
     LEVEL_UP = "LEVEL_UP"
 }
+export declare enum InvitationStatus {
+    PENDING = "PENDING",
+    ACCEPTED = "ACCEPTED",
+    REJECTED = "REJECTED"
+}
 export interface UserResponse {
     id: string;
     email: string;
@@ -127,4 +132,22 @@ export interface CreateReflectionDto {
     prompt: string;
     response?: string;
     completedAt?: string;
+}
+export interface NotificationItemResponse {
+    id: string;
+    profileId: string;
+    type: string;
+    title: string;
+    body?: string | null;
+    iconName?: string | null;
+    referenceId?: string | null;
+    isRead: boolean;
+    createdAt: string;
+    invitationDetails?: {
+        invitationId: string;
+        roomId: string;
+        roomName: string;
+        inviterName: string;
+        status: InvitationStatus;
+    } | null;
 }

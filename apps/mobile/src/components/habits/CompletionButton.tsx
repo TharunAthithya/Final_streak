@@ -11,17 +11,17 @@ interface CompletionButtonProps {
 export const CompletionButton: React.FC<CompletionButtonProps> = ({
   status,
   onPress,
-  size = 36,
+  size = 40,
 }) => {
   const getStyles = () => {
     switch (status) {
       case 'completed':
-        return 'bg-premiumGold border border-premiumGold';
+        return 'bg-[#E8C08A] border border-[#E8C08A]';
       case 'disabled':
-        return 'border border-premiumGoldMuted opacity-30';
+        return 'border border-[#2B2521] opacity-30';
       case 'pending':
       default:
-        return 'border border-premiumGold bg-transparent';
+        return 'border-[1.5px] border-[#2B2521] bg-transparent';
     }
   };
 
@@ -33,7 +33,7 @@ export const CompletionButton: React.FC<CompletionButtonProps> = ({
       className={`rounded-full justify-center items-center ${getStyles()}`}
     >
       {status === 'completed' && (
-        <Icon name="check" size={size * 0.5} color="#12110E" />
+        <Icon name="check" size={size * 0.5} color="#241C14" />
       )}
     </TouchableOpacity>
   );

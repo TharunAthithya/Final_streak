@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   Text,
   View,
@@ -11,26 +11,30 @@ import {
 import { useAuthStore } from '../../src/store/auth-store';
 import { useRoomStore } from '../../src/store/room-store';
 import { Icon } from '../../src/components/ui/Icon';
+import { RoomChatFeed, RoomFeedItem } from '../../src/components/rooms/RoomChatFeed';
+import { RoomInfoSheet } from '../../src/components/rooms/RoomInfoSheet';
+import { ReactionKind } from '../../src/components/rooms/ReactionPill';
 
 export default function RoomsScreen() {
-  const { apiClient } = useAuthStore();
+  const { user, apiClient } = useAuthStore();
   const {
     rooms,
     selectedRoomDetails: roomDetails,
-    leaderboard,
-    personalHabits,
+    roomActivities,
+    roomMembers,
     loading,
     loadingDetails,
     fetchRooms,
     createRoom,
     joinRoom,
-    leaveRoom,
     fetchRoomDetails,
-    linkPersonalHabit,
-    unlinkPersonalHabit,
+    fetchRoomActivities,
+    fetchRoomMembers,
+    toggleActivityReaction,
   } = useRoomStore();
 
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const [showInfoSheet, setShowInfoSheet] = useState(false);
 
   // Forms Visibility
   const [showCreate, setShowCreate] = useState(false);
@@ -44,9 +48,6 @@ export default function RoomsScreen() {
   // Join Form State
   const [inviteCode, setInviteCode] = useState('');
 
-  // Link Habit State
-  const [linkingRoomHabitId, setLinkingRoomHabitId] = useState<string | null>(null);
-
   useEffect(() => {
     fetchRooms(apiClient);
   }, []);
@@ -54,6 +55,8 @@ export default function RoomsScreen() {
   useEffect(() => {
     if (selectedRoomId) {
       fetchRoomDetails(apiClient, selectedRoomId);
+      fetchRoomActivities(apiClient, selectedRoomId);
+      fetchRoomMembers(apiClient, selectedRoomId);
     }
   }, [selectedRoomId]);
 
@@ -76,299 +79,334 @@ export default function RoomsScreen() {
   const handleJoinRoom = async () => {
     if (!inviteCode.trim()) return;
     try {
-      await joinRoom(apiClient, { inviteCode: inviteCode.trim().toUpperCase() });
+      const res = await joinRoom(apiClient, { inviteCode: inviteCode.trim().toUpperCase() });
       setInviteCode('');
       setShowJoin(false);
+      if (res?.requestSent) {
+        Alert.alert('Request Sent!', `Your request to join ${res.roomName || 'this room'} has been sent to the room owner for approval.`);
+      } else {
+        Alert.alert('Success!', 'You have joined the room!');
+      }
     } catch (e: any) {
       Alert.alert('Error', e.message);
     }
   };
 
-  const handleLeaveRoom = async () => {
-    if (!selectedRoomId) return;
-    Alert.alert(
-      'Leave Room',
-      'Are you sure you want to leave this room?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await leaveRoom(apiClient, selectedRoomId);
-              setSelectedRoomId(null);
-            } catch (e: any) {
-              Alert.alert('Error', e.message);
-            }
-          },
-        },
-      ]
-    );
+  const handleToggleReaction = async (activityId: string, reactionKind: ReactionKind) => {
+    await toggleActivityReaction(apiClient, activityId, reactionKind);
   };
 
-  const handleLinkHabit = async (roomHabitId: string, personalHabitId: string) => {
-    if (!selectedRoomId) return;
-    try {
-      await linkPersonalHabit(apiClient, selectedRoomId, roomHabitId, personalHabitId);
-      setLinkingRoomHabitId(null);
-    } catch (e: any) {
-      Alert.alert('Error linking habit', e.message);
-    }
-  };
+  // Convert room activities into rich chat feed items
+  const feedItems: RoomFeedItem[] = useMemo(() => {
+    if (!selectedRoomId || !roomDetails) return [];
 
-  const handleUnlinkHabit = async (roomHabitId: string) => {
-    if (!selectedRoomId) return;
-    try {
-      await unlinkPersonalHabit(apiClient, selectedRoomId, roomHabitId);
-    } catch (e: any) {
-      Alert.alert('Error unlinking habit', e.message);
-    }
-  };
+    const result: RoomFeedItem[] = [];
 
+    // Origin marker
+    const originDateStr = roomDetails.created_at
+      ? new Date(roomDetails.created_at).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })
+      : 'recently';
+    result.push({
+      id: 'origin-marker',
+      kind: 'origin',
+      label: `Room created · ${originDateStr}`,
+    });
+
+    let lastDateStr = '';
+    let lastActor = '';
+
+    roomActivities.forEach((act, idx) => {
+      const dateObj = new Date(act.createdAt);
+      const dateLabel = dateObj.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+      const timeLabel = dateObj.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+      // Date divider if day changed
+      if (dateLabel !== lastDateStr) {
+        lastDateStr = dateLabel;
+        result.push({
+          id: `date-${dateLabel}-${idx}`,
+          kind: 'date',
+          label: dateLabel,
+        });
+        lastActor = ''; // Reset run on new date
+      }
+
+      if (act.type === 'ROOM_JOIN') {
+        result.push({
+          id: act.id,
+          kind: 'join',
+          name: act.actorDisplayName,
+          time: timeLabel,
+        });
+        lastActor = '';
+      } else {
+        // Message (habit complete check-in)
+        const isFirstInRun = act.actorDisplayName !== lastActor;
+        lastActor = act.actorDisplayName;
+
+        result.push({
+          id: act.id,
+          kind: 'msg',
+          name: act.actorDisplayName,
+          habit: act.message || 'Completed a habit',
+          time: timeLabel,
+          isOwn: act.isOwn,
+          isFirstInRun,
+          isLastInRun: true,
+          reactions: act.reactions,
+        });
+      }
+    });
+
+    return result;
+  }, [selectedRoomId, roomDetails, roomActivities]);
+
+  // SELECTED ROOM DETAIL VIEW (WhatsApp Chat Feed Style)
   if (selectedRoomId && roomDetails) {
-    // ROOM DETAIL SCREEN OVERLAY
     return (
-      <ScrollView className="flex-1 bg-[#F8F9F7] p-6">
-        {/* Detail Header */}
-        <View className="flex-row justify-between items-center mb-6">
-          <TouchableOpacity
-            onPress={() => {
-              setSelectedRoomId(null);
-            }}
-            className="px-3 py-2 bg-white border border-[#E6E9E6] rounded-xl flex-row items-center"
-          >
-            <Icon name="arrow-left" size={14} color="#6B726D" className="mr-1" />
-            <Text className="text-[#6B726D] font-semibold">Back</Text>
-          </TouchableOpacity>
-          <Text className="text-xl font-bold text-[#1C211E] flex-1 text-center truncate px-2">{roomDetails.name}</Text>
-          <TouchableOpacity
-            onPress={handleLeaveRoom}
-            className="px-3 py-2 bg-[#FCDCDC] rounded-xl"
-          >
-            <Text className="text-[#D95C5C] font-semibold">Leave</Text>
-          </TouchableOpacity>
-        </View>
+      <View className="flex-1 bg-[#0B0B0C]">
+        {/* Header Bar */}
+        <View className="px-5 pt-14 pb-4 border-b border-[#1C1815] bg-[#0B0B0C]">
+          <View className="flex-row items-center space-x-3">
+            {/* Back Button */}
+            <TouchableOpacity
+              onPress={() => setSelectedRoomId(null)}
+              className="w-9 h-9 bg-[#18140F] border border-[#2B2521] rounded-full items-center justify-center mr-2"
+            >
+              <Icon name="arrow-left" size={16} color="#F5F2EC" />
+            </TouchableOpacity>
 
-        {loadingDetails ? (
-          <ActivityIndicator size="large" color="#256D4A" className="mt-10" />
-        ) : (
-          <View className="space-y-6 pb-12">
-            {/* Description Card */}
-            {roomDetails.description && (
-              <View className="bg-white border border-[#E6E9E6] p-4 rounded-2xl">
-                <Text className="text-xs font-semibold text-[#6B726D] uppercase tracking-wider mb-1">About Room</Text>
-                <Text className="text-sm text-[#1C211E]">{roomDetails.description}</Text>
-                {roomDetails.inviteCode && (
-                  <Text className="text-xs font-bold text-[#256D4A] mt-2">Invite Code: {roomDetails.inviteCode}</Text>
-                )}
+            {/* Room Title Header (Tappable for Info Sheet) */}
+            <TouchableOpacity
+              onPress={() => setShowInfoSheet(true)}
+              className="flex-1 flex-row items-center min-w-0"
+            >
+              <View className="w-9 h-9 bg-[#3A2E1F] border border-[#E8C08A]/30 rounded-xl items-center justify-center mr-2.5 shrink-0">
+                <Icon name="rooms" size={18} color="#E8C08A" />
               </View>
-            )}
+              <View className="flex-1 min-w-0">
+                <Text numberOfLines={1} className="text-base font-bold text-[#F5F2EC] leading-tight">
+                  {roomDetails.name}
+                </Text>
+                <Text className="text-[11px] text-[#65605A]">Tap for room info</Text>
+              </View>
+              <Icon name="chevron-right" size={16} color="#65605A" className="ml-1" />
+            </TouchableOpacity>
+          </View>
 
-            {/* Room Accountability Habits */}
-            <View className="bg-white border border-[#E6E9E6] p-5 rounded-2xl mt-4">
-              <Text className="text-base font-bold text-[#1C211E] mb-4">Accountability Targets</Text>
-              {roomDetails.roomHabits?.length === 0 ? (
-                <Text className="text-sm text-[#6B726D]">No accountability habits defined yet.</Text>
-              ) : (
-                roomDetails.roomHabits?.map((rh: any) => {
-                  // Check if personal habit is linked (simulate or verify from links if fetched)
-                  const isLinked = false; // Add verify link check if available
-                  return (
-                    <View key={rh.id} className="py-3 border-b border-[#E6E9E6] last:border-b-0">
-                      <View className="flex-row justify-between items-center">
-                        <View className="flex-1 pr-4">
-                          <Text className="text-sm font-semibold text-[#1C211E]">{rh.name}</Text>
-                          {rh.description && (
-                            <Text className="text-xs text-[#6B726D] mt-1">{rh.description}</Text>
-                          )}
-                        </View>
-                        {isLinked ? (
-                          <TouchableOpacity
-                            onPress={() => handleUnlinkHabit(rh.id)}
-                            className="bg-[#FCDCDC] px-3 py-2 rounded-xl"
-                          >
-                            <Text className="text-[#D95C5C] text-xs font-semibold">Unlink</Text>
-                          </TouchableOpacity>
-                        ) : (
-                          <TouchableOpacity
-                            onPress={() => setLinkingRoomHabitId(rh.id)}
-                            className="bg-[#256D4A] px-3 py-2 rounded-xl"
-                          >
-                            <Text className="text-white text-xs font-semibold">Link Habit</Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-
-                      {/* Dropdown list of personal habits to link */}
-                      {linkingRoomHabitId === rh.id && (
-                        <View className="mt-3 p-3 bg-[#F8F9F7] rounded-xl border border-[#E6E9E6]">
-                          <Text className="text-xs font-bold text-[#6B726D] mb-2">Select Private Habit to Link:</Text>
-                          {personalHabits.map((ph) => (
-                            <TouchableOpacity
-                              key={ph.id}
-                              onPress={() => handleLinkHabit(rh.id, ph.id)}
-                              className="py-2 border-b border-[#E6E9E6] last:border-0"
-                            >
-                              <Text className="text-sm text-[#256D4A]">{ph.name}</Text>
-                            </TouchableOpacity>
-                          ))}
-                          <TouchableOpacity
-                            onPress={() => setLinkingRoomHabitId(null)}
-                            className="mt-2 py-2 items-center"
-                          >
-                            <Text className="text-xs text-[#6B726D] font-bold">Cancel</Text>
-                          </TouchableOpacity>
-                        </View>
-                      )}
-                    </View>
-                  );
-                })
-              )}
+          {/* Room Badges Row */}
+          <View className="flex-row items-center space-x-2 mt-3.5">
+            <View className="bg-[#1B1512] border border-[#2B2521] px-2.5 py-1 rounded-full flex-row items-center mr-2">
+              <Icon name="fire" size={12} color="#E8A05A" className="mr-1" />
+              <Text className="text-[11.5px] font-semibold text-[#F5F2EC]">
+                {roomDetails.streak || 4} day streak
+              </Text>
             </View>
-
-            <View className="bg-white border border-[#E6E9E6] p-5 rounded-2xl mt-4">
-              <View className="flex-row items-center mb-4">
-                <Icon name="trophy" size={16} color="#1C211E" className="mr-1.5" />
-                <Text className="text-base font-bold text-[#1C211E]">Weekly Standings</Text>
-              </View>
-              {leaderboard.length === 0 ? (
-                <Text className="text-sm text-[#6B726D]">No leaderboard completions logged yet.</Text>
-              ) : (
-                leaderboard.map((member, idx) => (
-                  <View
-                    key={member.userId}
-                    className="flex-row items-center py-3 border-b border-[#E6E9E6] last:border-b-0"
-                  >
-                    <Text className="text-sm font-bold text-[#6B726D] w-8">#{idx + 1}</Text>
-                    <Text className="text-sm font-semibold text-[#1C211E] flex-1">{member.displayName}</Text>
-                    <Text className="text-sm font-bold text-[#256D4A]">{member.score} check-ins</Text>
-                  </View>
-                ))
-              )}
+            <View className="bg-[#1B1512] border border-[#2B2521] px-2.5 py-1 rounded-full flex-row items-center">
+              <View className="w-1.5 h-1.5 rounded-full bg-[#E8C08A] mr-1.5" />
+              <Text className="text-[11.5px] font-semibold text-[#F5F2EC]">
+                {roomMembers.length || 1} active member{roomMembers.length === 1 ? '' : 's'}
+              </Text>
             </View>
           </View>
+        </View>
+
+        {/* Chat Feed */}
+        {loadingDetails ? (
+          <ActivityIndicator size="large" color="#E8C08A" className="mt-10" />
+        ) : (
+          <RoomChatFeed items={feedItems} onToggleReaction={handleToggleReaction} />
         )}
-      </ScrollView>
+
+        {/* Room Info Bottom Sheet */}
+        <RoomInfoSheet
+          visible={showInfoSheet}
+          roomName={roomDetails.name}
+          description={roomDetails.description}
+          inviteCode={roomDetails.inviteCode}
+          memberCount={roomMembers.length}
+          activeTodayCount={1}
+          members={roomMembers}
+          apiClient={apiClient}
+          roomId={selectedRoomId}
+          isOwner={roomDetails.ownerId === user?.id}
+          onClose={() => setShowInfoSheet(false)}
+        />
+      </View>
     );
   }
 
-  // ROOMS LIST VIEW
+  // ROOMS LIST VIEW (Matching Figma "Accountability Rooms")
   return (
-    <ScrollView className="flex-1 bg-[#F8F9F7] p-6">
-      {/* Header */}
-      <View className="flex-row justify-between items-center mb-6">
-        <View>
-          <Text className="text-2xl font-bold text-[#1C211E]">Accountability Rooms</Text>
-          <Text className="text-sm text-[#6B726D]">Share streaks and complete targets</Text>
+    <View className="flex-1 bg-[#0B0B0C]">
+      <ScrollView className="flex-1 px-6 pt-20" showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View className="mb-6">
+          <Text className="text-3xl font-bold text-[#F5F2EC] mb-1">Accountability Rooms</Text>
+          <Text className="text-sm text-[#9C958C]">Share streaks and complete targets</Text>
         </View>
-      </View>
 
-      {/* Buttons */}
-      <View className="flex-row mb-6">
-        <TouchableOpacity
-          onPress={() => {
-            setShowCreate(!showCreate);
-            setShowJoin(false);
-          }}
-          className="flex-1 bg-[#256D4A] py-3 rounded-xl items-center mr-2 shadow-sm"
-        >
-          <Text className="text-white font-semibold">Create Room</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => {
-            setShowJoin(!showJoin);
-            setShowCreate(false);
-          }}
-          className="flex-1 bg-[#E7F2EC] py-3 rounded-xl items-center ml-2 border border-[#256D4A] shadow-sm"
-        >
-          <Text className="text-[#256D4A] font-semibold">Join Room</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Forms */}
-      {showCreate && (
-        <View className="bg-white border border-[#E6E9E6] p-5 rounded-2xl mb-6 shadow-sm">
-          <Text className="text-base font-bold text-[#1C211E] mb-4">Create Room</Text>
-          <Text className="text-xs font-semibold text-[#6B726D] uppercase tracking-wider mb-2">Room Name</Text>
-          <TextInput
-            value={roomName}
-            onChangeText={setRoomName}
-            placeholder="e.g. Early Birds Coders"
-            className="px-4 py-3 border border-[#E6E9E6] rounded-xl mb-4"
-          />
-          <Text className="text-xs font-semibold text-[#6B726D] uppercase tracking-wider mb-2">Description</Text>
-          <TextInput
-            value={roomDesc}
-            onChangeText={setRoomDesc}
-            placeholder="Room details..."
-            className="px-4 py-3 border border-[#E6E9E6] rounded-xl mb-4"
-          />
+        {/* Buttons matching Figma design */}
+        <View className="flex-row mb-8">
           <TouchableOpacity
-            onPress={handleCreateRoom}
-            className="bg-[#256D4A] py-3 rounded-xl items-center"
+            onPress={() => {
+              setShowCreate(!showCreate);
+              setShowJoin(false);
+            }}
+            className="flex-1 bg-[#E8C08A] py-3.5 rounded-xl items-center flex-row justify-center mr-2 shadow-sm"
           >
-            <Text className="text-white font-semibold">Save Room</Text>
+            <Icon name="plus" size={16} color="#241C14" className="mr-1.5" />
+            <Text className="text-[#241C14] font-bold text-sm">Create Room</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              setShowJoin(!showJoin);
+              setShowCreate(false);
+            }}
+            className="flex-1 bg-[#181513] border border-[#2B2521] py-3.5 rounded-xl items-center flex-row justify-center ml-2 shadow-sm"
+          >
+            <Icon name="arrow-right" size={16} color="#F5F2EC" className="mr-1.5" />
+            <Text className="text-[#F5F2EC] font-bold text-sm">Join Room</Text>
           </TouchableOpacity>
         </View>
-      )}
 
-      {showJoin && (
-        <View className="bg-white border border-[#E6E9E6] p-5 rounded-2xl mb-6 shadow-sm">
-          <Text className="text-base font-bold text-[#1C211E] mb-4">Join Room</Text>
-          <Text className="text-xs font-semibold text-[#6B726D] uppercase tracking-wider mb-2">Invite Code</Text>
-          <TextInput
-            value={inviteCode}
-            onChangeText={setInviteCode}
-            placeholder="e.g. AE48CD"
-            autoCapitalize="characters"
-            className="px-4 py-3 border border-[#E6E9E6] rounded-xl mb-4"
-          />
-          <TouchableOpacity
-            onPress={handleJoinRoom}
-            className="bg-[#256D4A] py-3 rounded-xl items-center"
-          >
-            <Text className="text-white font-semibold">Join</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+        {/* Create Form */}
+        {showCreate && (
+          <View className="bg-[#181513] border border-[#2B2521] p-5 rounded-2xl mb-6 shadow-sm">
+            <Text className="text-base font-bold text-[#F5F2EC] mb-4">Create Room</Text>
+            <Text className="text-xs font-semibold text-[#65605A] uppercase tracking-wider mb-2">Room Name</Text>
+            <TextInput
+              value={roomName}
+              onChangeText={setRoomName}
+              placeholder="e.g. Coding beginner"
+              placeholderTextColor="#65605A"
+              className="px-4 py-3 bg-[#0B0B0C] border border-[#2B2521] text-[#F5F2EC] rounded-xl mb-4"
+            />
+            <Text className="text-xs font-semibold text-[#65605A] uppercase tracking-wider mb-2">Description</Text>
+            <TextInput
+              value={roomDesc}
+              onChangeText={setRoomDesc}
+              placeholder="Daily coding, everyone..."
+              placeholderTextColor="#65605A"
+              className="px-4 py-3 bg-[#0B0B0C] border border-[#2B2521] text-[#F5F2EC] rounded-xl mb-4"
+            />
+            <Text className="text-xs font-semibold text-[#65605A] uppercase tracking-wider mb-2">Visibility</Text>
+            <View className="flex-row mb-4">
+              <TouchableOpacity
+                onPress={() => setVisibility('PUBLIC')}
+                className={`flex-1 py-3 px-2 items-center justify-center rounded-xl mr-2 ${
+                  visibility === 'PUBLIC' ? 'bg-[#E8C08A]' : 'bg-[#181513] border border-[#2B2521]'
+                }`}
+              >
+                <Text className={`font-bold text-xs ${visibility === 'PUBLIC' ? 'text-[#241C14]' : 'text-[#F5F2EC]'}`}>
+                  Public
+                </Text>
+                <Text className={`text-[10px] mt-0.5 ${visibility === 'PUBLIC' ? 'text-[#241C14]/80' : 'text-[#65605A]'}`}>
+                  Direct Join
+                </Text>
+              </TouchableOpacity>
 
-      {/* Rooms List */}
-      {loading ? (
-        <ActivityIndicator size="large" color="#256D4A" className="mt-10" />
-      ) : rooms.length === 0 ? (
-        <View className="bg-white border border-[#E6E9E6] p-8 rounded-2xl items-center mt-4">
-          <Icon name="rooms" size={32} color="#256D4A" className="mb-2" />
-          <Text className="text-base font-semibold text-[#1C211E]">No Rooms Joined</Text>
-          <Text className="text-sm text-[#6B726D] text-center mt-1">Create a room or ask for an invite code to join others.</Text>
-        </View>
-      ) : (
-        rooms.map((room) => (
-          <TouchableOpacity
-            key={room.id}
-            onPress={() => setSelectedRoomId(room.id)}
-            className="bg-white border border-[#E6E9E6] p-5 rounded-2xl mb-4 shadow-sm"
-          >
-            <View className="flex-row justify-between items-center">
-              <View className="flex-1 pr-4">
-                <Text className="text-lg font-bold text-[#1C211E]">{room.name}</Text>
-                {room.description ? (
-                  <Text className="text-sm text-[#6B726D] mt-1" numberOfLines={2}>
-                    {room.description}
-                  </Text>
-                ) : null}
-                <View className="flex-row items-center mt-2">
-                  <Icon name="rooms" size={12} color="#256D4A" className="mr-1" />
-                  <Text className="text-xs font-semibold text-[#256D4A]">
-                    {room.memberCount} active members
-                  </Text>
+              <TouchableOpacity
+                onPress={() => setVisibility('PRIVATE')}
+                className={`flex-1 py-3 px-2 items-center justify-center rounded-xl ml-2 ${
+                  visibility === 'PRIVATE' ? 'bg-[#E8C08A]' : 'bg-[#181513] border border-[#2B2521]'
+                }`}
+              >
+                <Text className={`font-bold text-xs ${visibility === 'PRIVATE' ? 'text-[#241C14]' : 'text-[#F5F2EC]'}`}>
+                  Private
+                </Text>
+                <Text className={`text-[10px] mt-0.5 ${visibility === 'PRIVATE' ? 'text-[#241C14]/80' : 'text-[#65605A]'}`}>
+                  Requires Approval
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              onPress={handleCreateRoom}
+              className="bg-[#E8C08A] py-3.5 rounded-xl items-center"
+            >
+              <Text className="text-[#241C14] font-bold text-sm">Save Room</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Join Form */}
+        {showJoin && (
+          <View className="bg-[#181513] border border-[#2B2521] p-5 rounded-2xl mb-6 shadow-sm">
+            <Text className="text-base font-bold text-[#F5F2EC] mb-4">Join Room</Text>
+            <Text className="text-xs font-semibold text-[#65605A] uppercase tracking-wider mb-2">Invite Code</Text>
+            <TextInput
+              value={inviteCode}
+              onChangeText={setInviteCode}
+              placeholder="e.g. CODE-7F3K9"
+              placeholderTextColor="#65605A"
+              autoCapitalize="characters"
+              className="px-4 py-3 bg-[#0B0B0C] border border-[#2B2521] text-[#F5F2EC] rounded-xl mb-4"
+            />
+            <TouchableOpacity
+              onPress={handleJoinRoom}
+              className="bg-[#E8C08A] py-3.5 rounded-xl items-center"
+            >
+              <Text className="text-[#241C14] font-bold text-sm">Join Room</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Rooms Section */}
+        <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-3">
+          MY ROOMS
+        </Text>
+
+        {loading ? (
+          <ActivityIndicator size="large" color="#E8C08A" className="mt-10" />
+        ) : rooms.length === 0 ? (
+          <View className="bg-[#181513] border border-[#2B2521] p-8 rounded-2xl items-center mt-2">
+            <Icon name="rooms" size={32} color="#E8C08A" className="mb-2" />
+            <Text className="text-base font-semibold text-[#F5F2EC]">No Rooms Joined</Text>
+            <Text className="text-sm text-[#9C958C] text-center mt-1">Create a room or ask for an invite code to join others.</Text>
+          </View>
+        ) : (
+          rooms.map((room) => (
+            <TouchableOpacity
+              key={room.id}
+              onPress={() => setSelectedRoomId(room.id)}
+              className="bg-[#181513] border border-[#2B2521] p-5 rounded-2xl mb-4 flex-row items-center justify-between"
+            >
+              <View className="flex-row items-center flex-1 pr-4">
+                <View className="w-12 h-12 bg-[#221C16] rounded-2xl items-center justify-center mr-4 border border-[#3A2E1F]">
+                  <Icon name="rooms" size={20} color="#E8C08A" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-lg font-bold text-[#F5F2EC] mb-0.5">{room.name}</Text>
+                  {room.description ? (
+                    <Text className="text-xs text-[#9C958C] mb-1.5" numberOfLines={1}>
+                      {room.description}
+                    </Text>
+                  ) : null}
+                  <View className="flex-row items-center">
+                    <View className="w-2 h-2 rounded-full bg-[#E8C08A] mr-1.5" />
+                    <Text className="text-xs text-[#9C958C]">
+                      {room.memberCount || 1} active member{room.memberCount === 1 ? '' : 's'}
+                    </Text>
+                  </View>
                 </View>
               </View>
-              <Icon name="chevron-right" size={20} color="#6B726D" />
-            </View>
-          </TouchableOpacity>
-        ))
-      )}
-    </ScrollView>
+              <Icon name="chevron-right" size={20} color="#65605A" />
+            </TouchableOpacity>
+          ))
+        )}
+
+        {/* Dashed Discover card matching Figma design */}
+        <View className="border border-dashed border-[#453C34] rounded-2xl p-6 items-center my-4 bg-[#17130F]">
+          <View className="w-10 h-10 bg-[#181513] rounded-full items-center justify-center mb-3">
+            <Icon name="feed" size={18} color="#9C958C" />
+          </View>
+          <Text className="text-sm text-[#9C958C] text-center max-w-[220px]">
+            Discover more rooms to stay accountable with others.
+          </Text>
+        </View>
+
+        <View className="h-16" />
+      </ScrollView>
+    </View>
   );
 }

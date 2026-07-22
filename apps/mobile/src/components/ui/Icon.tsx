@@ -1,5 +1,5 @@
 import React from 'react';
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { cssInterop } from 'react-native-css-interop';
 
 interface IconProps {
@@ -7,17 +7,24 @@ interface IconProps {
   size?: number;
   color?: string;
   className?: string;
+  family?: 'feather' | 'material';
 }
 
-// Enable NativeWind styling support on the Feather icon component
+// Enable NativeWind styling support on icon components
 cssInterop(Feather, {
   className: {
     target: 'style',
   },
 });
 
+cssInterop(MaterialCommunityIcons, {
+  className: {
+    target: 'style',
+  },
+});
+
 // Map custom icon names used throughout the app to standard Feather icon names
-const iconMap: Record<string, keyof typeof Feather.glyphMap> = {
+const featherIconMap: Record<string, keyof typeof Feather.glyphMap> = {
   streak: 'zap',
   fire: 'zap',
   check: 'check',
@@ -40,10 +47,6 @@ const iconMap: Record<string, keyof typeof Feather.glyphMap> = {
   calendar: 'calendar',
   repeat: 'repeat',
   book: 'book-open',
-  reading: 'book-open',
-  water: 'droplet',
-  coding: 'code',
-  walking: 'user',
   trash: 'trash-2',
   'arrow-right': 'arrow-right',
   'arrow-left': 'arrow-left',
@@ -53,17 +56,35 @@ const iconMap: Record<string, keyof typeof Feather.glyphMap> = {
   alert: 'alert-triangle',
   info: 'info',
   freeze: 'wind',
+  edit: 'edit',
 };
 
 export const Icon: React.FC<IconProps> = ({
   name,
   size = 24,
-  color = '#256D4A',
+  color = '#E8C08A',
   className = '',
+  family,
 }) => {
   const normalizedName = name.toLowerCase();
-  const featherName = iconMap[normalizedName] || 'help-circle';
 
+  // If explicit family is material, or if the name is not in feather map and looks like a material icon name
+  const isMaterial =
+    family === 'material' ||
+    (!featherIconMap[normalizedName] && (name.includes('-') || name === 'water' || name === 'run' || name === 'coffee' || name === 'meditation' || name === 'cash'));
+
+  if (isMaterial) {
+    return (
+      <MaterialCommunityIcons
+        name={name as any}
+        size={size}
+        color={color}
+        className={className}
+      />
+    );
+  }
+
+  const featherName = featherIconMap[normalizedName] || 'help-circle';
   return (
     <Feather
       name={featherName}

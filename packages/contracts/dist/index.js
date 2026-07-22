@@ -29,6 +29,12 @@ export var ActivityType;
     ActivityType["ROOM_JOIN"] = "ROOM_JOIN";
     ActivityType["LEVEL_UP"] = "LEVEL_UP";
 })(ActivityType || (ActivityType = {}));
+export var InvitationStatus;
+(function (InvitationStatus) {
+    InvitationStatus["PENDING"] = "PENDING";
+    InvitationStatus["ACCEPTED"] = "ACCEPTED";
+    InvitationStatus["REJECTED"] = "REJECTED";
+})(InvitationStatus || (InvitationStatus = {}));
 export var DayStatus;
 (function (DayStatus) {
     DayStatus["COMPLETED"] = "COMPLETED";

@@ -1,0 +1,214 @@
+import React from 'react';
+import {
+  Modal,
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
+import { Icon } from './Icon';
+import { useNotificationStore, NotificationItem } from '../../store/notification-store';
+import { StreakApiClient } from '@streak/api-client';
+
+interface NotificationScreenProps {
+  visible: boolean;
+  apiClient: StreakApiClient;
+  onClose: () => void;
+}
+
+export const NotificationScreen: React.FC<NotificationScreenProps> = ({
+  visible,
+  apiClient,
+  onClose,
+}) => {
+  const { notifications, loading, fetchNotifications, markAllAsRead, respondToInvitation } = useNotificationStore();
+
+  const handleAccept = async (item: NotificationItem) => {
+    if (!item.referenceId) return;
+    try {
+      await respondToInvitation(apiClient, item.referenceId, true);
+      await fetchNotifications(apiClient);
+      if (item.type === 'JOIN_REQUEST') {
+        const userName = item.title.split(' ')[0] || 'User';
+        Alert.alert('Request Approved', `${userName} has joined your room!`);
+      } else {
+        Alert.alert('Accepted', 'You have joined the room!');
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to accept invitation');
+    }
+  };
+
+  const handleReject = async (invitationId: string) => {
+    try {
+      await respondToInvitation(apiClient, invitationId, false);
+      await fetchNotifications(apiClient);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to reject invitation');
+    }
+  };
+
+  // Group notifications into TODAY and EARLIER
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayNotifications = notifications.filter(
+    (n) => n.createdAt.split('T')[0] === todayStr
+  );
+  const earlierNotifications = notifications.filter(
+    (n) => n.createdAt.split('T')[0] !== todayStr
+  );
+
+  const renderNotificationItem = (item: NotificationItem) => {
+    const isActionable = (item.type === 'ROOM_INVITATION' || item.type === 'JOIN_REQUEST') && item.referenceId;
+
+    // Resolve icon name and family
+    let iconName = item.iconName || 'bell';
+    let iconFamily: 'feather' | 'material' = 'feather';
+    if (item.type === 'JOIN_REQUEST') {
+      iconName = 'account-plus';
+      iconFamily = 'material';
+    } else if (item.type === 'ROOM_INVITATION') {
+      iconName = 'account-group';
+      iconFamily = 'material';
+    } else if (item.type === 'ROOM_JOINED') {
+      iconName = 'account-check';
+      iconFamily = 'material';
+    } else if (item.type === 'BADGE_EARNED') {
+      iconName = 'star-outline';
+      iconFamily = 'material';
+    } else if (item.type === 'CHECK_IN') {
+      iconName = 'user';
+      iconFamily = 'feather';
+    }
+
+    return (
+      <View
+        key={item.id}
+        className={`p-4 rounded-2xl mb-3 border ${
+          isActionable
+            ? 'bg-[#1D1712] border-[#3A2E1F]'
+            : 'bg-[#181513] border-[#2B2521]'
+        }`}
+      >
+        <View className="flex-row items-start">
+          {/* Icon Circle */}
+          <View className="w-10 h-10 bg-[#221C16] rounded-full items-center justify-center mr-3 mt-0.5 border border-[#3A2E1F]">
+            <Icon
+              name={iconName}
+              size={18}
+              color="#E8C08A"
+              family={iconFamily}
+            />
+          </View>
+
+          {/* Content */}
+          <View className="flex-1 pr-2">
+            <Text className="text-sm font-semibold text-[#F5F2EC] leading-snug">
+              {item.title}
+            </Text>
+            {item.body ? (
+              <Text className="text-xs text-[#9C958C] mt-0.5 leading-relaxed">{item.body}</Text>
+            ) : null}
+            <Text className="text-[11px] text-[#65605A] mt-1.5 font-medium">
+              {formatTimeAgo(item.createdAt)}
+            </Text>
+          </View>
+
+          {/* Unread indicator dot */}
+          {!item.isRead && (
+            <View className="w-2.5 h-2.5 rounded-full bg-[#E8C08A] mt-2" />
+          )}
+        </View>
+
+        {/* Actionable Invitation / Join Request Buttons matching Figma */}
+        {isActionable && item.referenceId && (
+          <View className="flex-row mt-3 pt-3 border-t border-[#2B2521] space-x-3">
+            <TouchableOpacity
+              onPress={() => handleAccept(item)}
+              className="flex-1 py-2.5 bg-[#E8C08A] rounded-xl items-center mr-2"
+            >
+              <Text className="text-xs font-bold text-[#241C14]">Accept</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => handleReject(item.referenceId!)}
+              className="flex-1 py-2.5 bg-[#181513] border border-[#2B2521] rounded-xl items-center"
+            >
+              <Text className="text-xs font-bold text-[#F5F2EC]">Decline</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+    >
+      <View style={{ flex: 1, backgroundColor: '#0B0B0C' }}>
+        {/* Header matching Figma */}
+        <View className="px-6 pt-14 pb-4 border-b border-[#2B2521] flex-row justify-between items-center bg-[#0B0B0C]">
+          <TouchableOpacity onPress={onClose} className="p-2">
+            <Icon name="arrow-left" size={20} color="#F5F2EC" />
+          </TouchableOpacity>
+          <Text className="text-lg font-bold text-[#F5F2EC]">Notifications</Text>
+          <TouchableOpacity onPress={() => markAllAsRead(apiClient)} className="p-2">
+            <Text className="text-xs font-semibold text-[#E8C08A]">Mark all read</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
+          {loading && notifications.length === 0 ? (
+            <ActivityIndicator size="large" color="#E8C08A" className="mt-10" />
+          ) : notifications.length === 0 ? (
+            <View className="bg-[#181513] border border-[#2B2521] p-8 rounded-2xl items-center my-10">
+              <Icon name="bell" size={32} color="#E8C08A" className="mb-3" />
+              <Text className="text-base font-semibold text-[#F5F2EC]">No Notifications</Text>
+              <Text className="text-sm text-[#9C958C] text-center mt-1">
+                Room invitations and streak updates will appear here.
+              </Text>
+            </View>
+          ) : (
+            <View className="pb-16">
+              {/* TODAY Section */}
+              {todayNotifications.length > 0 && (
+                <View className="mb-6">
+                  <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-3">
+                    TODAY
+                  </Text>
+                  {todayNotifications.map(renderNotificationItem)}
+                </View>
+              )}
+
+              {/* EARLIER Section */}
+              {earlierNotifications.length > 0 && (
+                <View className="mb-6">
+                  <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-3">
+                    EARLIER
+                  </Text>
+                  {earlierNotifications.map(renderNotificationItem)}
+                </View>
+              )}
+            </View>
+          )}
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+};
+
+function formatTimeAgo(isoString: string): string {
+  const date = new Date(isoString);
+  const now = new Date();
+  const diffSec = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffSec < 60) return 'Just now';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  if (diffSec < 172800) return 'Yesterday';
+  return `${Math.floor(diffSec / 86400)} days ago`;
+}

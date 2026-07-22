@@ -13,7 +13,11 @@ import {
 import { useAuthStore } from '../../src/store/auth-store';
 import { useSyncStore } from '../../src/store/sync-store';
 import { useHabitStore } from '../../src/store/habit-store';
+import { useNotificationStore } from '../../src/store/notification-store';
 import { HabitCard } from '../../src/components/habits/HabitCard';
+import { HabitDetailModal } from '../../src/components/habits/HabitDetailModal';
+import { NotificationBell } from '../../src/components/ui/NotificationBell';
+import { NotificationScreen } from '../../src/components/ui/NotificationScreen';
 import { ProgressRing } from '../../src/components/habits/ProgressRing';
 import { SessionStatus } from '../../src/components/habits/RecentSessionsStrip';
 import NetInfo from '@react-native-community/netinfo';
@@ -22,13 +26,18 @@ import { useBeforeYouBegin } from '../../src/hooks/useBeforeYouBegin';
 import { isHabitScheduledForDate, getHabitScheduleLabel } from '../../src/utils/streak';
 import { Icon } from '../../src/components/ui/Icon';
 import { calculateCalendarGridStatuses, getCalendarGridDates, validateFreeze } from '../../src/utils/freeze';
+import { resolveHabitIcon } from '../../src/utils/habit-icons';
 
 export default function TodayScreen() {
   const { apiClient, user } = useAuthStore();
   const { pendingQueue, enqueueCompleteHabit, syncQueue, isSyncing, enqueueFreezeHabit } = useSyncStore();
   const { habits, loading, fetchHabits, createHabit, checkInHabit, undoCheckIn, freezeHabit } = useHabitStore();
+  const { unreadCount, fetchNotifications } = useNotificationStore();
 
   const [isOfflineMode, setIsOfflineMode] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [selectedHabitForDetail, setSelectedHabitForDetail] = useState<any | null>(null);
+
   const {
     greeting,
     promiseDay,
@@ -50,78 +59,76 @@ export default function TodayScreen() {
     refreshDate,
   } = useBeforeYouBegin();
 
-  const todayHabits = habits.filter((habit) => isHabitScheduledForDate(habit, new Date()));
-
+  // Ritual modal state
   const [showRitual, setShowRitual] = useState(false);
-  const [showAllHabits, setShowAllHabits] = useState(false);
   const [ritualStep, setRitualStep] = useState<1 | 2>(1);
   const [reflectionInput, setReflectionInput] = useState('');
 
-  // Auto-refresh date on focus / app state change to reset ritual at midnight
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextStatus) => {
-      if (nextStatus === 'active') {
-        refreshDate();
-      }
-    });
-    return () => subscription.remove();
-  }, [refreshDate]);
+  // See all habits modal state
+  const [showAllHabits, setShowAllHabits] = useState(false);
 
-  useEffect(() => {
-    if (showRitual) {
-      setReflectionInput(draftText);
-      setRitualStep(1);
-    }
-  }, [showRitual, draftText]);
-
-  // Create Habit Form State
+  // Habit creation form state
   const [showCreate, setShowCreate] = useState(false);
   const [habitName, setHabitName] = useState('');
   const [habitDesc, setHabitDesc] = useState('');
   const [scheduleType, setScheduleType] = useState<'DAILY' | 'SPECIFIC_DAYS'>('DAILY');
-  const [selectedDays, setSelectedDays] = useState<number[]>([]); // 0=Sun, 6=Sat
+  const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4, 5]);
 
-  // Check network status
   useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener((state) => {
-      const isOnline = !!state.isConnected && !!state.isInternetReachable;
-      setIsOfflineMode(!isOnline);
-      if (isOnline && pendingQueue.length > 0) {
+    fetchHabits(apiClient);
+    fetchNotifications(apiClient);
+  }, []);
+
+  // Sync draft text to input when ritual opens
+  useEffect(() => {
+    if (showRitual) {
+      setReflectionInput(draftText || '');
+    }
+  }, [showRitual, draftText]);
+
+  // Network listener & AppState listener for offline detection & date refresh
+  useEffect(() => {
+    const unsubscribeNet = NetInfo.addEventListener((state) => {
+      const offline = !state.isConnected || !state.isInternetReachable;
+      setIsOfflineMode(offline);
+      if (!offline && pendingQueue.length > 0) {
         syncQueue(apiClient).then(() => fetchHabits(apiClient));
       }
     });
-    return () => unsubscribe();
-  }, [pendingQueue.length]);
 
-  useEffect(() => {
-    if (!isOfflineMode) {
-      fetchHabits(apiClient);
-    }
-  }, [isOfflineMode]);
+    const subscriptionAppState = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        refreshDate();
+        fetchHabits(apiClient);
+        fetchNotifications(apiClient);
+      }
+    });
+
+    return () => {
+      unsubscribeNet();
+      subscriptionAppState.remove();
+    };
+  }, [pendingQueue]);
+
+  // Filter habits scheduled for today
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayHabits = habits.filter((h) => isHabitScheduledForDate(h, todayStr));
 
   const handleToggleCheckIn = async (habit: any) => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const isCompleted = (habit as any).completedToday;
     const key = `mobile-idemp-${habit.id}-${todayStr}-${Date.now()}`;
     const tz = user?.timezone || 'UTC';
-
-    const h = habit as any;
-    const isCompleted = h.completedToday;
-
     try {
       if (isCompleted) {
-        // Find if check-in exists to undo.
-        // For simplicity, we trigger undo check-in with a placeholder ID if offline.
         await undoCheckIn(
           apiClient,
           habit.id,
-          h.todayCheckInId || 'placeholder-cid',
+          habit.todayCheckInId || 'placeholder-cid',
           todayStr,
           tz,
           key,
           isOfflineMode,
-          async (hId, lDate, tZone, idKey, cId) => {
-            // Offline undo queue logic
-          }
+          async () => {}
         );
       } else {
         await checkInHabit(
@@ -158,9 +165,13 @@ export default function TodayScreen() {
   const handleCreateHabit = async () => {
     if (!habitName.trim()) return;
     try {
+      // Auto-resolve icon based on habit name
+      const resolvedIcon = resolveHabitIcon(habitName.trim());
+
       await createHabit(apiClient, {
         name: habitName.trim(),
         description: habitDesc.trim() || undefined,
+        icon: resolvedIcon,
         scheduleType: scheduleType,
         daysOfWeek: scheduleType === 'SPECIFIC_DAYS' ? selectedDays : undefined,
         timezone: user?.timezone || 'UTC',
@@ -174,11 +185,27 @@ export default function TodayScreen() {
     }
   };
 
+  const handleDeleteHabit = async (habitId: string) => {
+    await apiClient.deleteHabit(habitId);
+    await fetchHabits(apiClient);
+  };
+
+  const handleUpdateHabitIcon = async (habitId: string, newIcon: string) => {
+    await apiClient.updateHabitIcon(habitId, newIcon);
+    if (selectedHabitForDetail && selectedHabitForDetail.id === habitId) {
+      setSelectedHabitForDetail({
+        ...selectedHabitForDetail,
+        icon: newIcon,
+      });
+    }
+    await fetchHabits(apiClient);
+  };
+
   const toggleDaySelection = (day: number) => {
     if (selectedDays.includes(day)) {
-      setSelectedDays(prev => prev.filter(d => d !== day));
+      setSelectedDays((prev) => prev.filter((d) => d !== day));
     } else {
-      setSelectedDays(prev => [...prev, day]);
+      setSelectedDays((prev) => [...prev, day]);
     }
   };
 
@@ -198,16 +225,14 @@ export default function TodayScreen() {
     return statuses.reverse();
   };
 
-  
-
   return (
-    <View className="flex-1 bg-[#12110E]">
+    <View className="flex-1 bg-[#0B0B0C]">
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         {/* Offline Status Banner */}
         {isOfflineMode && (
-          <View className="bg-premiumGoldMuted px-4 py-2 flex-row justify-center items-center">
-            <Icon name="alert" size={12} color="#C5A880" className="mr-1.5" />
-            <Text className="text-xs font-semibold text-premiumGold">Offline Mode - Local Queue Active</Text>
+          <View className="bg-[#3A2E1F] px-4 py-2 flex-row justify-center items-center">
+            <Icon name="alert" size={12} color="#E8C08A" className="mr-1.5" />
+            <Text className="text-xs font-semibold text-[#E8C08A]">Offline Mode - Local Queue Active</Text>
           </View>
         )}
 
@@ -216,67 +241,75 @@ export default function TodayScreen() {
           <TouchableOpacity
             onPress={() => syncQueue(apiClient).then(() => fetchHabits(apiClient))}
             disabled={isSyncing}
-            className="bg-[#2A2722] px-4 py-3 border-b border-premiumGold flex-row justify-between items-center"
+            className="bg-[#181513] px-4 py-3 border-b border-[#2B2521] flex-row justify-between items-center"
           >
             <View className="flex-row items-center">
-              {!isSyncing && <Icon name="repeat" size={12} color="#C5A880" className="mr-1.5" />}
-              <Text className="text-xs font-semibold text-premiumGold">
+              {!isSyncing && <Icon name="repeat" size={12} color="#E8C08A" className="mr-1.5" />}
+              <Text className="text-xs font-semibold text-[#E8C08A]">
                 {isSyncing ? 'Syncing...' : `${pendingQueue.length} check-ins pending. Tap to force.`}
               </Text>
             </View>
-            {isSyncing && <ActivityIndicator size="small" color="#C5A880" />}
+            {isSyncing && <ActivityIndicator size="small" color="#E8C08A" />}
           </TouchableOpacity>
         )}
 
-        {/* Greeting Hero Section */}
-        <View className="px-6 pt-20 pb-6">
-          <Text className="text-sm font-bold text-premiumTextMuted uppercase tracking-widest mb-1">
-            {greeting}
-          </Text>
-          <Text style={{ fontFamily: 'Georgia' }} className="text-5xl font-bold text-white mb-2">
-            {displayName}.
-          </Text>
-          <Text className="text-base text-premiumTextMuted">
-            Day {promiseDay} of keeping your promise.
-          </Text>
-          {hasCompletedToday ? (
-            <View className="mt-4 flex-row items-center">
-              <Icon name="check" size={16} color="#C5A880" className="mr-1.5" />
-              <Text className="text-base text-[#C5A880] font-semibold">
-                You've started today with intention.
-              </Text>
-            </View>
-          ) : (
-            <TouchableOpacity onPress={() => setShowRitual(true)} className="mt-4 flex-row items-center">
-              <Icon name="book" size={16} color="white" className="mr-1.5" />
-              <Text className="text-base text-white font-medium underline">
-                Before You Begin
-              </Text>
-              <Icon name="arrow-right" size={14} color="white" className="ml-1.5" />
-            </TouchableOpacity>
-          )}
+        {/* Greeting Hero Section with Notification Bell */}
+        <View className="px-6 pt-20 pb-6 flex-row justify-between items-start">
+          <View className="flex-1 pr-4">
+            <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-1">
+              {greeting}
+            </Text>
+            <Text className="text-4xl font-bold text-[#F5F2EC] mb-2">
+              {displayName}.
+            </Text>
+            <Text className="text-sm text-[#9C958C]">
+              Day {promiseDay} of keeping your promise.
+            </Text>
+            {hasCompletedToday ? (
+              <View className="mt-4 flex-row items-center">
+                <Icon name="check" size={16} color="#E8C08A" className="mr-1.5" />
+                <Text className="text-sm text-[#E8C08A] font-semibold">
+                  You've started today with intention.
+                </Text>
+              </View>
+            ) : (
+              <TouchableOpacity onPress={() => setShowRitual(true)} className="mt-4 flex-row items-center">
+                <Icon name="book" size={16} color="#F5F2EC" className="mr-1.5" />
+                <Text className="text-sm text-[#F5F2EC] font-medium underline">
+                  Before You Begin
+                </Text>
+                <Icon name="arrow-right" size={14} color="#F5F2EC" className="ml-1.5" />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Notification Bell Icon */}
+          <NotificationBell
+            unreadCount={unreadCount}
+            onPress={() => setShowNotifications(true)}
+          />
         </View>
 
         {/* Today's Promise Card Section */}
         <View className="px-6 mb-8">
-          <View className="bg-premiumSurface border border-[#2B2723] rounded-3xl p-6 flex-row justify-between items-center">
+          <View className="bg-[#181513] border border-[#2B2521] rounded-3xl p-6 flex-row justify-between items-center">
             <View className="flex-1 pr-4">
-              <Text className="text-sm font-bold text-premiumTextMuted uppercase tracking-widest mb-3">
+              <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-3">
                 Today's Promise
               </Text>
               <View className="flex-row items-baseline mb-1">
-                <Text className="text-4xl font-bold text-white mr-1.5">{keptPromises}</Text>
-                <Text className="text-xl text-premiumTextMuted font-medium">of {totalPromises} kept</Text>
+                <Text className="text-4xl font-bold text-[#F5F2EC] mr-1.5">{keptPromises}</Text>
+                <Text className="text-lg text-[#9C958C] font-medium">of {totalPromises} kept</Text>
               </View>
-              <Text className="text-sm text-premiumTextMuted mb-4">
+              <Text className="text-xs text-[#9C958C] mb-4">
                 {remainingPromises > 0 ? `${remainingPromises} promises remaining today` : 'All promises kept today!'}
               </Text>
               <View className="flex-row items-center">
-                <Icon name="streak" size={14} color="#C5A880" className="mr-1.5" />
-                <Text className="text-sm text-premiumGold font-semibold">{globalStreak}-day streak</Text>
+                <Icon name="streak" size={14} color="#E8C08A" className="mr-1.5" />
+                <Text className="text-xs text-[#E8C08A] font-semibold">{globalStreak}-day streak</Text>
               </View>
             </View>
-            {/* Svg progress ring */}
+            {/* Progress ring */}
             <ProgressRing percentage={percentageDone} size={100} strokeWidth={8} />
           </View>
         </View>
@@ -284,56 +317,56 @@ export default function TodayScreen() {
         {/* Habit List Section */}
         <View className="px-6 pb-24">
           <View className="flex-row justify-between items-center mb-4">
-            <Text className="text-sm font-bold text-premiumTextMuted uppercase tracking-widest">
+            <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest">
               Today's Habits
             </Text>
             <TouchableOpacity onPress={() => setShowAllHabits(true)}>
-              <Text className="text-sm font-semibold text-premiumGold">See all</Text>
+              <Text className="text-xs font-semibold text-[#E8C08A]">See all</Text>
             </TouchableOpacity>
           </View>
 
           {/* Create Habit Collapsible Form */}
           {showCreate && (
-            <View className="p-5 bg-premiumSurface border border-[#2B2723] rounded-2xl mb-6 shadow-sm">
-              <Text className="text-base font-bold text-white mb-4">New Habit</Text>
-              
-              <Text className="text-xs font-semibold text-premiumTextMuted uppercase tracking-wider mb-2">Habit Name</Text>
+            <View className="p-5 bg-[#181513] border border-[#2B2521] rounded-2xl mb-6 shadow-sm">
+              <Text className="text-base font-bold text-[#F5F2EC] mb-4">New Habit</Text>
+
+              <Text className="text-xs font-semibold text-[#65605A] uppercase tracking-wider mb-2">Habit Name</Text>
               <TextInput
                 value={habitName}
                 onChangeText={setHabitName}
-                placeholder="e.g. 30m Coding"
-                placeholderTextColor="#5C4E3D"
-                className="px-4 py-3 border border-[#2B2723] text-white rounded-xl mb-4 bg-[#12110E]"
+                placeholder="e.g. 30m Coding, Water, Reading"
+                placeholderTextColor="#65605A"
+                className="px-4 py-3 border border-[#2B2521] text-[#F5F2EC] rounded-xl mb-4 bg-[#0B0B0C]"
               />
 
-              <Text className="text-xs font-semibold text-premiumTextMuted uppercase tracking-wider mb-2">Description</Text>
+              <Text className="text-xs font-semibold text-[#65605A] uppercase tracking-wider mb-2">Description</Text>
               <TextInput
                 value={habitDesc}
                 onChangeText={setHabitDesc}
                 placeholder="Optional description"
-                placeholderTextColor="#5C4E3D"
-                className="px-4 py-3 border border-[#2B2723] text-white rounded-xl mb-4 bg-[#12110E]"
+                placeholderTextColor="#65605A"
+                className="px-4 py-3 border border-[#2B2521] text-[#F5F2EC] rounded-xl mb-4 bg-[#0B0B0C]"
               />
 
-              <Text className="text-xs font-semibold text-premiumTextMuted uppercase tracking-wider mb-2">Schedule Type</Text>
+              <Text className="text-xs font-semibold text-[#65605A] uppercase tracking-wider mb-2">Schedule Type</Text>
               <View className="flex-row mb-4">
                 <TouchableOpacity
                   onPress={() => setScheduleType('DAILY')}
-                  className={`flex-1 py-3 items-center rounded-xl mr-2 ${scheduleType === 'DAILY' ? 'bg-premiumGold' : 'bg-premiumGoldMuted'}`}
+                  className={`flex-1 py-3 items-center rounded-xl mr-2 ${scheduleType === 'DAILY' ? 'bg-[#E8C08A]' : 'bg-[#3A2E1F]'}`}
                 >
-                  <Text className={`font-semibold ${scheduleType === 'DAILY' ? 'text-premiumBg' : 'text-premiumTextMuted'}`}>Daily</Text>
+                  <Text className={`font-semibold text-xs ${scheduleType === 'DAILY' ? 'text-[#241C14]' : 'text-[#9C958C]'}`}>Daily</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => setScheduleType('SPECIFIC_DAYS')}
-                  className={`flex-1 py-3 items-center rounded-xl ml-2 ${scheduleType === 'SPECIFIC_DAYS' ? 'bg-premiumGold' : 'bg-premiumGoldMuted'}`}
+                  className={`flex-1 py-3 items-center rounded-xl ml-2 ${scheduleType === 'SPECIFIC_DAYS' ? 'bg-[#E8C08A]' : 'bg-[#3A2E1F]'}`}
                 >
-                  <Text className={`font-semibold ${scheduleType === 'SPECIFIC_DAYS' ? 'text-premiumBg' : 'text-premiumTextMuted'}`}>Specific Days</Text>
+                  <Text className={`font-semibold text-xs ${scheduleType === 'SPECIFIC_DAYS' ? 'text-[#241C14]' : 'text-[#9C958C]'}`}>Specific Days</Text>
                 </TouchableOpacity>
               </View>
 
               {scheduleType === 'SPECIFIC_DAYS' && (
                 <View className="mb-4">
-                  <Text className="text-xs font-semibold text-premiumTextMuted uppercase tracking-wider mb-2">Days of Week</Text>
+                  <Text className="text-xs font-semibold text-[#65605A] uppercase tracking-wider mb-2">Days of Week</Text>
                   <View className="flex-row justify-between">
                     {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, idx) => {
                       const isSelected = selectedDays.includes(idx);
@@ -341,9 +374,9 @@ export default function TodayScreen() {
                         <TouchableOpacity
                           key={idx}
                           onPress={() => toggleDaySelection(idx)}
-                          className={`w-9 h-9 rounded-full items-center justify-center ${isSelected ? 'bg-premiumGold' : 'bg-[#2B2723]'}`}
+                          className={`w-9 h-9 rounded-full items-center justify-center ${isSelected ? 'bg-[#E8C08A]' : 'bg-[#2B2521]'}`}
                         >
-                          <Text className={`text-xs font-semibold ${isSelected ? 'text-premiumBg' : 'text-premiumTextMuted'}`}>{day}</Text>
+                          <Text className={`text-xs font-semibold ${isSelected ? 'text-[#241C14]' : 'text-[#9C958C]'}`}>{day}</Text>
                         </TouchableOpacity>
                       );
                     })}
@@ -353,20 +386,20 @@ export default function TodayScreen() {
 
               <TouchableOpacity
                 onPress={handleCreateHabit}
-                className="bg-premiumGold py-3 rounded-xl items-center"
+                className="bg-[#E8C08A] py-3.5 rounded-xl items-center"
               >
-                <Text className="text-premiumBg font-semibold">Save Habit</Text>
+                <Text className="text-[#241C14] font-bold text-sm">Save Habit</Text>
               </TouchableOpacity>
             </View>
           )}
 
           {loading ? (
-            <ActivityIndicator size="large" color="#C5A880" className="mt-10" />
+            <ActivityIndicator size="large" color="#E8C08A" className="mt-10" />
           ) : todayHabits.length === 0 ? (
-            <View className="bg-premiumSurface border border-[#2B2723] p-8 rounded-2xl items-center mt-4">
-              <Icon name="book" size={32} color="#C5A880" className="mb-2" />
-              <Text className="text-base font-semibold text-white">No habits for today</Text>
-              <Text className="text-sm text-premiumTextMuted text-center mt-1">Tap the plus button to create your first habit.</Text>
+            <View className="bg-[#181513] border border-[#2B2521] p-8 rounded-2xl items-center mt-4">
+              <Icon name="book" size={32} color="#E8C08A" className="mb-2" />
+              <Text className="text-base font-semibold text-[#F5F2EC]">No habits for today</Text>
+              <Text className="text-sm text-[#9C958C] text-center mt-1">Tap the plus button to create your first habit.</Text>
             </View>
           ) : (
             todayHabits.map((habit) => {
@@ -376,7 +409,7 @@ export default function TodayScreen() {
                 <HabitCard
                   key={habit.id}
                   name={habit.name}
-                  iconName={habit.icon || 'habit'}
+                  iconName={habit.icon}
                   reminderTime={habit.reminderTime}
                   scheduleLabel={getHabitScheduleLabel(habit)}
                   currentStreak={habit.stats?.currentStreak || 0}
@@ -387,6 +420,7 @@ export default function TodayScreen() {
                   dates={gridDates}
                   freezableDates={freezableDates}
                   onFreeze={(date) => handleFreezeHabit(habit.id, date)}
+                  onCardPress={() => setSelectedHabitForDetail(habit)}
                 />
               );
             })
@@ -394,62 +428,79 @@ export default function TodayScreen() {
         </View>
       </ScrollView>
 
+      {/* Habit Detail Modal */}
+      <HabitDetailModal
+        visible={!!selectedHabitForDetail}
+        habit={selectedHabitForDetail}
+        apiClient={apiClient}
+        onClose={() => setSelectedHabitForDetail(null)}
+        onDelete={handleDeleteHabit}
+        onUpdateIcon={handleUpdateHabitIcon}
+      />
+
+      {/* Notification Screen Modal */}
+      <NotificationScreen
+        visible={showNotifications}
+        apiClient={apiClient}
+        onClose={() => setShowNotifications(false)}
+      />
+
       {/* Before You Begin Ritual Modal */}
       <Modal
         visible={showRitual}
         animationType="slide"
-        presentationStyle="fullScreen"
+        transparent
         onRequestClose={() => setShowRitual(false)}
       >
-        <View className="flex-1 bg-[#12110E] px-6 justify-center">
+        <View style={{ flex: 1, backgroundColor: '#0B0B0C' }} className="px-6 justify-center">
           {ritualStep === 1 ? (
             <View className="items-center">
-              <Text className="text-3xl text-[#C5A880] font-bold mb-4">Before you begin...</Text>
-              <Text className="text-lg text-white text-center mb-2 font-medium">
+              <Text className="text-3xl text-[#E8C08A] font-bold mb-4">Before you begin...</Text>
+              <Text className="text-lg text-[#F5F2EC] text-center mb-2 font-medium">
                 Take a moment to remember why you're showing up today.
               </Text>
-              <Text className="text-base text-premiumTextMuted text-center mb-8">
+              <Text className="text-base text-[#9C958C] text-center mb-8">
                 Today's promise starts with one intentional decision.
               </Text>
-              
+
               <TouchableOpacity
                 onPress={() => setRitualStep(2)}
-                className="w-full bg-premiumGold py-4 rounded-xl items-center"
+                className="w-full bg-[#E8C08A] py-4 rounded-xl items-center"
               >
-                <Text className="text-premiumBg font-bold text-base">Continue</Text>
+                <Text className="text-[#241C14] font-bold text-base">Continue</Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 onPress={() => setShowRitual(false)}
                 className="mt-4"
               >
-                <Text className="text-premiumTextMuted text-sm">Cancel</Text>
+                <Text className="text-[#9C958C] text-sm">Cancel</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <View>
-              <Text className="text-sm font-bold text-premiumTextMuted uppercase tracking-widest mb-3">Daily Reflection</Text>
-              <Text className="text-2xl text-white font-semibold mb-6">{currentPrompt}</Text>
-              
+              <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-3">Daily Reflection</Text>
+              <Text className="text-2xl text-[#F5F2EC] font-semibold mb-6">{currentPrompt}</Text>
+
               <TextInput
                 multiline
                 numberOfLines={4}
                 maxLength={250}
                 placeholder="Type your reflection here (optional)..."
-                placeholderTextColor="#8A8276"
+                placeholderTextColor="#65605A"
                 value={reflectionInput}
                 onChangeText={(text) => {
                   setReflectionInput(text);
                   saveDraftText(text);
                 }}
-                className="bg-[#1E1C18] border border-[#2B2723] rounded-2xl p-4 text-white text-base mb-2 h-32"
+                className="bg-[#181513] border border-[#2B2521] rounded-2xl p-4 text-[#F5F2EC] text-base mb-2 h-32"
                 style={{ textAlignVertical: 'top' }}
               />
-              
-              <Text className="text-right text-xs text-premiumTextMuted mb-8">
+
+              <Text className="text-right text-xs text-[#9C958C] mb-8">
                 {reflectionInput.length} / 250 characters
               </Text>
-              
+
               <TouchableOpacity
                 onPress={async () => {
                   try {
@@ -459,16 +510,16 @@ export default function TodayScreen() {
                     Alert.alert('Error', e.message);
                   }
                 }}
-                className="bg-premiumGold py-4 rounded-xl items-center mb-4"
+                className="bg-[#E8C08A] py-4 rounded-xl items-center mb-4"
               >
-                <Text className="text-premiumBg font-bold text-base">Begin Today</Text>
+                <Text className="text-[#241C14] font-bold text-base">Begin Today</Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 onPress={() => setShowRitual(false)}
                 className="items-center"
               >
-                <Text className="text-premiumTextMuted text-sm">Close and Save Draft</Text>
+                <Text className="text-[#9C958C] text-sm">Close and Save Draft</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -479,39 +530,43 @@ export default function TodayScreen() {
       <Modal
         visible={showAllHabits}
         animationType="slide"
-        presentationStyle="fullScreen"
+        transparent
         onRequestClose={() => setShowAllHabits(false)}
       >
-        <View className="flex-1 bg-[#12110E]">
+        <View style={{ flex: 1, backgroundColor: '#0B0B0C' }}>
           {/* Header */}
-          <View className="px-6 pt-16 pb-4 border-b border-[#2B2723] flex-row justify-between items-center bg-[#12110E]">
-            <Text className="text-xl font-bold text-white">All Today's Habits</Text>
-            <TouchableOpacity onPress={() => setShowAllHabits(false)} className="px-3 py-2 bg-[#2B2723] rounded-lg">
-              <Text className="text-premiumGold font-semibold text-sm">Close</Text>
+          <View className="px-6 pt-16 pb-4 border-b border-[#2B2521] flex-row justify-between items-center bg-[#0B0B0C]">
+            <Text className="text-xl font-bold text-[#F5F2EC]">All Today's Habits</Text>
+            <TouchableOpacity onPress={() => setShowAllHabits(false)} className="px-3 py-2 bg-[#2B2521] rounded-lg">
+              <Text className="text-[#E8C08A] font-semibold text-sm">Close</Text>
             </TouchableOpacity>
           </View>
 
           {/* List of Habits */}
           <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
             {loading ? (
-              <ActivityIndicator size="large" color="#C5A880" className="mt-10" />
+              <ActivityIndicator size="large" color="#E8C08A" className="mt-10" />
             ) : todayHabits.length === 0 ? (
-              <View className="bg-premiumSurface border border-[#2B2723] p-8 rounded-2xl items-center mt-4">
-                <Icon name="book" size={32} color="#C5A880" className="mb-2" />
-                <Text className="text-base font-semibold text-white">No habits for today</Text>
+              <View className="bg-[#181513] border border-[#2B2521] p-8 rounded-2xl items-center mt-4">
+                <Icon name="book" size={32} color="#E8C08A" className="mb-2" />
+                <Text className="text-base font-semibold text-[#F5F2EC]">No habits for today</Text>
               </View>
             ) : (
               todayHabits.map((habit) => (
                 <HabitCard
                   key={habit.id}
                   name={habit.name}
-                  iconName={habit.icon || 'habit'}
+                  iconName={habit.icon}
                   reminderTime={habit.reminderTime}
                   scheduleLabel={getHabitScheduleLabel(habit)}
                   currentStreak={habit.stats?.currentStreak || 0}
                   statuses={getDotStatuses(habit.id, habit.stats?.currentStreak || 0)}
                   completionStatus={(habit as any).completedToday ? 'completed' : 'pending'}
                   onToggleComplete={() => handleToggleCheckIn(habit)}
+                  onCardPress={() => {
+                    setShowAllHabits(false);
+                    setSelectedHabitForDetail(habit);
+                  }}
                 />
               ))
             )}
@@ -523,9 +578,9 @@ export default function TodayScreen() {
       {/* FAB Plus Button */}
       <TouchableOpacity
         onPress={() => setShowCreate(!showCreate)}
-        className="absolute bottom-6 right-6 w-14 h-14 bg-premiumGold rounded-full justify-center items-center shadow-lg"
+        className="absolute bottom-6 right-6 w-14 h-14 bg-[#E8C08A] rounded-full justify-center items-center shadow-lg"
       >
-        <Icon name="plus" size={28} color="#12110E" />
+        <Icon name="plus" size={28} color="#241C14" />
       </TouchableOpacity>
     </View>
   );

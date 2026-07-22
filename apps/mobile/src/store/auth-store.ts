@@ -80,18 +80,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       // 1. Get current session
       const { data: { session } } = await client.supabase.auth.getSession();
-      
+
       if (session) {
-        client.supabase.auth.setSession(session);
+        await client.supabase.auth.setSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+        });
+
         let profile = null;
 
         if (isOnline) {
           try {
             profile = await client.getMe();
-            // Cache profile locally for offline fallback
             await AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile));
-          } catch (err) {
-            console.warn('Failed to fetch online profile, falling back to cache:', err);
+          } catch (err: any) {
+            console.warn('Failed to fetch online profile:', err?.message || err);
+            if (err?.message?.includes('Not authenticated') || err?.message?.includes('Invalid')) {
+              // Session is invalid or stale -> sign out to prompt login
+              await client.supabase.auth.signOut();
+              await AsyncStorage.removeItem(PROFILE_CACHE_KEY);
+              set({ token: null, user: null, loading: false });
+              return;
+            }
           }
         }
 
@@ -101,6 +111,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           if (cached) {
             profile = JSON.parse(cached);
           }
+        }
+
+        if (!profile && isOnline) {
+          // If online and profile could not be retrieved, clear session
+          await client.supabase.auth.signOut();
+          await AsyncStorage.removeItem(PROFILE_CACHE_KEY);
+          set({ token: null, user: null, loading: false });
+          return;
         }
 
         set({ token: session.access_token, user: profile, error: null });
@@ -113,12 +131,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           const currentNetState = await NetInfo.fetch();
           const currentlyOnline = !!currentNetState.isConnected && !!currentNetState.isInternetReachable;
 
-          if (currentlyOnline) {
+          if (currentlyOnline && (!profile || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
             try {
               profile = await client.getMe();
               await AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile));
             } catch (e: any) {
-              console.error('Failed to update profile on auth change:', e.message);
+              console.warn('Failed to update profile on auth change:', e.message);
+              if (e?.message?.includes('Not authenticated')) {
+                await client.supabase.auth.signOut();
+                await AsyncStorage.removeItem(PROFILE_CACHE_KEY);
+                set({ token: null, user: null });
+                return;
+              }
             }
           }
           set({ token: newSession.access_token, user: profile, error: null });

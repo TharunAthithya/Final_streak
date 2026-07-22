@@ -41,70 +41,82 @@ export default function RegisterScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="flex-1 bg-[#F8F9F7]"
+      className="flex-1 bg-[#12110E]"
     >
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
         <View className="flex-1 justify-center px-6 py-10">
           {/* Header */}
           <View className="mb-8 items-center">
-            <Text className="text-3xl font-bold text-[#1C211E] tracking-tight">Create Account</Text>
-            <Text className="text-sm text-[#6B726D] mt-2">Start your social habit transformation</Text>
+            {/* Gold logo container matching Figma */}
+            <View className="w-16 h-16 bg-[#C5A880] rounded-2xl items-center justify-center mb-6 shadow-sm">
+              <Text className="text-[#12110E] text-3xl font-bold">S</Text>
+            </View>
+            <Text className="text-3xl font-bold text-white tracking-tight mb-2">Create account</Text>
+            <Text className="text-sm text-[#8A8276]">Start becoming who you want to be.</Text>
           </View>
 
           {/* Form */}
           <View className="space-y-4">
-            <View>
-              <Text className="text-xs font-semibold text-[#6B726D] uppercase tracking-wider mb-2">Display Name</Text>
+            <View className="mb-4">
+              <Text className="text-xs font-semibold text-[#8A8276] uppercase tracking-wider mb-2">
+                DISPLAY NAME
+              </Text>
               <TextInput
                 value={name}
                 onChangeText={setName}
                 placeholder="John Doe"
-                placeholderTextColor="#9AA19C"
-                className="w-full px-4 py-3 bg-white border border-[#E6E9E6] rounded-xl text-[#1C211E] focus:border-[#256D4A]"
+                placeholderTextColor="#5C4E3D"
+                className="w-full px-4 py-3.5 bg-[#1E1C18] border border-[#3E3831] rounded-xl text-white focus:border-[#C5A880]"
               />
             </View>
 
-            <View className="mt-4">
-              <Text className="text-xs font-semibold text-[#6B726D] uppercase tracking-wider mb-2">Username</Text>
+            <View className="mb-4">
+              <Text className="text-xs font-semibold text-[#8A8276] uppercase tracking-wider mb-2">
+                USERNAME
+              </Text>
               <TextInput
                 value={username}
                 onChangeText={setUsername}
                 placeholder="johndoe_99"
-                placeholderTextColor="#9AA19C"
+                placeholderTextColor="#5C4E3D"
                 autoCapitalize="none"
-                className="w-full px-4 py-3 bg-white border border-[#E6E9E6] rounded-xl text-[#1C211E] focus:border-[#256D4A]"
+                className="w-full px-4 py-3.5 bg-[#1E1C18] border border-[#3E3831] rounded-xl text-white focus:border-[#C5A880]"
               />
             </View>
 
-            <View className="mt-4">
-              <Text className="text-xs font-semibold text-[#6B726D] uppercase tracking-wider mb-2">Email Address</Text>
+            <View className="mb-4">
+              <Text className="text-xs font-semibold text-[#8A8276] uppercase tracking-wider mb-2">
+                EMAIL ADDRESS
+              </Text>
               <TextInput
                 value={email}
                 onChangeText={setEmail}
                 placeholder="you@example.com"
-                placeholderTextColor="#9AA19C"
+                placeholderTextColor="#5C4E3D"
                 autoCapitalize="none"
                 keyboardType="email-address"
-                className="w-full px-4 py-3 bg-white border border-[#E6E9E6] rounded-xl text-[#1C211E] focus:border-[#256D4A]"
+                className="w-full px-4 py-3.5 bg-[#1E1C18] border border-[#3E3831] rounded-xl text-white focus:border-[#C5A880]"
               />
             </View>
 
-            <View className="mt-4">
-              <Text className="text-xs font-semibold text-[#6B726D] uppercase tracking-wider mb-2">Password</Text>
+            <View className="mb-4">
+              <Text className="text-xs font-semibold text-[#8A8276] uppercase tracking-wider mb-2">
+                PASSWORD
+              </Text>
               <TextInput
                 value={password}
                 onChangeText={setPassword}
                 placeholder="Min 6 characters"
-                placeholderTextColor="#9AA19C"
+                placeholderTextColor="#5C4E3D"
                 secureTextEntry
-                className="w-full px-4 py-3 bg-white border border-[#E6E9E6] rounded-xl text-[#1C211E] focus:border-[#256D4A]"
+                className="w-full px-4 py-3.5 bg-[#1E1C18] border border-[#3E3831] rounded-xl text-white focus:border-[#C5A880]"
               />
             </View>
           </View>
 
           {/* Errors */}
           {(error || localError) ? (
-            <View className="mt-6 p-4 bg-[#FCDCDC] border border-[#F59E9E] rounded-xl">
+            <View className="mt-2 mb-4 p-4 bg-[#2A1C1C] border border-[#D95C5C] rounded-xl">
               <Text className="text-sm text-[#D95C5C] font-medium">{localError || error}</Text>
             </View>
           ) : null}
@@ -113,20 +125,20 @@ export default function RegisterScreen() {
           <TouchableOpacity
             onPress={handleRegister}
             disabled={loading}
-            className="w-full mt-8 bg-[#256D4A] active:bg-[#1D5239] py-4 rounded-xl items-center justify-center shadow-sm"
+            className="w-full mt-4 bg-[#C5A880] active:bg-[#B3966E] py-4 rounded-xl items-center justify-center shadow-sm"
           >
             {loading ? (
-              <ActivityIndicator color="white" />
+              <ActivityIndicator color="#12110E" />
             ) : (
-              <Text className="text-white font-semibold text-base">Sign Up</Text>
+              <Text className="text-[#12110E] font-bold text-base">Sign up</Text>
             )}
           </TouchableOpacity>
 
           {/* Login Redirect */}
           <View className="flex-row justify-center mt-6 space-x-1">
-            <Text className="text-[#6B726D]">Already have an account?</Text>
+            <Text className="text-[#8A8276] text-sm">Already have an account? </Text>
             <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
-              <Text className="text-[#256D4A] font-semibold">Sign In</Text>
+              <Text className="text-[#C5A880] text-sm font-bold">Sign in</Text>
             </TouchableOpacity>
           </View>
         </View>

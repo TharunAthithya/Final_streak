@@ -26,7 +26,7 @@ export const ProgressRing: React.FC<ProgressRingProps> = ({
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke="#2A2722"
+          stroke="#2B2521"
           strokeWidth={strokeWidth}
           fill="transparent"
         />
@@ -35,7 +35,7 @@ export const ProgressRing: React.FC<ProgressRingProps> = ({
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke="#C5A880"
+          stroke="#E8C08A"
           strokeWidth={strokeWidth}
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
@@ -47,8 +47,8 @@ export const ProgressRing: React.FC<ProgressRingProps> = ({
       </Svg>
       {/* Percentage Center Text */}
       <View className="absolute items-center justify-center">
-        <Text className="text-xl font-bold text-white">{clampedPercentage}%</Text>
-        <Text className="text-[10px] text-premiumTextMuted uppercase tracking-wider">done</Text>
+        <Text className="text-xl font-bold text-[#F5F2EC]">{clampedPercentage}%</Text>
+        <Text className="text-[10px] text-[#65605A] font-bold uppercase tracking-wider">done</Text>
       </View>
     </View>
   );

@@ -31,20 +31,20 @@ export const RecentSessionsStrip: React.FC<RecentSessionsStripProps> = ({
     let dotStyle = 'rounded-full';
     switch (status) {
       case 'completed':
-        dotStyle += ' w-2.5 h-2.5 bg-premiumGold';
+        dotStyle += ' w-2.5 h-2.5 bg-[#E8C08A]';
         break;
       case 'freeze':
-        dotStyle += ' w-2.5 h-2.5 bg-slate-500'; // Restyled to desaturated slate-500
+        dotStyle += ' w-2.5 h-2.5 bg-slate-500';
         break;
       case 'missed':
-        dotStyle += ' w-2.5 h-2.5 bg-error';
+        dotStyle += ' w-2.5 h-2.5 bg-[#E8899A]';
         break;
       case 'not_scheduled':
-        dotStyle += ' w-1.5 h-1.5 bg-[#2C2723] border border-[#3E3831]';
+        dotStyle += ' w-1.5 h-1.5 bg-[#221C16] border border-[#3A2E1F]';
         break;
       case 'pending':
       default:
-        dotStyle += ' w-2 h-2 border border-premiumTextMuted/40 bg-transparent';
+        dotStyle += ' w-2 h-2 border border-[#65605A] bg-transparent';
         break;
     }
 

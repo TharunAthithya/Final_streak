@@ -1,5 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { UserResponse, HabitResponse, CheckInResponse, RoomResponse, ActivityResponse, ReflectionResponse, CreateReflectionDto } from '@streak/contracts';
+import { UserResponse, HabitResponse, CheckInResponse, RoomResponse, ReflectionResponse, CreateReflectionDto } from '@streak/contracts';
 import { CreateHabitDto, CheckInDto, CreateRoomDto, JoinRoomDto, UpdateUserDto } from '@streak/validation';
 export declare class StreakApiClient {
     supabase: SupabaseClient;
@@ -46,7 +46,10 @@ export declare class StreakApiClient {
     }>;
     getRooms(): Promise<RoomResponse[]>;
     createRoom(dto: CreateRoomDto): Promise<RoomResponse>;
-    joinRoom(dto: JoinRoomDto): Promise<RoomResponse>;
+    joinRoom(dto: JoinRoomDto): Promise<RoomResponse & {
+        requestSent?: boolean;
+        roomName?: string;
+    }>;
     leaveRoom(roomId: string): Promise<{
         success: boolean;
     }>;
@@ -66,7 +69,16 @@ export declare class StreakApiClient {
     archiveRoomHabit(roomId: string, roomHabitId: string): Promise<any>;
     linkPersonalHabit(roomId: string, roomHabitId: string, personalHabitId: string): Promise<any>;
     unlinkPersonalHabit(roomId: string, roomHabitId: string): Promise<any>;
-    getRoomActivity(roomId: string): Promise<ActivityResponse[]>;
+    getRoomActivity(roomId: string): Promise<any[]>;
+    toggleActivityReaction(activityId: string, reactionType: string): Promise<any>;
+    getRoomMembers(roomId: string): Promise<Array<{
+        profileId: string;
+        displayName: string;
+        username: string;
+        role: string;
+        joinedAt: string;
+        isYou: boolean;
+    }>>;
     getRoomLeaderboard(roomId: string, period?: string): Promise<Array<{
         userId: string;
         displayName: string;
@@ -89,4 +101,19 @@ export declare class StreakApiClient {
     }>;
     getReflectionForDate(localDate: string): Promise<ReflectionResponse | null>;
     submitReflection(dto: CreateReflectionDto): Promise<ReflectionResponse>;
+    updateHabitIcon(habitId: string, iconName: string): Promise<any>;
+    getNotifications(): Promise<any[]>;
+    markNotificationRead(notificationId: string): Promise<boolean>;
+    markAllNotificationsRead(): Promise<boolean>;
+    respondToInvitation(invitationId: string, accept: boolean): Promise<boolean>;
+    searchUsersByUsername(query: string): Promise<Array<{
+        id: string;
+        displayName: string;
+        username: string;
+        avatarPath?: string;
+    }>>;
+    sendRoomInvitation(roomId: string, inviteeId: string): Promise<{
+        invitationId: string;
+        success: boolean;
+    }>;
 }
