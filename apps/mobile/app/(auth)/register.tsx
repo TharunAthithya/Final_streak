@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../src/store/auth-store';
+import { Icon } from '../../src/components/ui/Icon';
 
 export default function RegisterScreen() {
   const { signUp, loading, error } = useAuthStore();
@@ -18,6 +19,7 @@ export default function RegisterScreen() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState('');
   const router = useRouter();
 
@@ -103,14 +105,23 @@ export default function RegisterScreen() {
               <Text className="text-xs font-semibold text-[#8A8276] uppercase tracking-wider mb-2">
                 PASSWORD
               </Text>
-              <TextInput
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Min 6 characters"
-                placeholderTextColor="#5C4E3D"
-                secureTextEntry
-                className="w-full px-4 py-3.5 bg-[#1E1C18] border border-[#3E3831] rounded-xl text-white focus:border-[#C5A880]"
-              />
+              <View className="w-full bg-[#1E1C18] border border-[#3E3831] rounded-xl flex-row items-center px-4">
+                <TextInput
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Min 6 characters"
+                  placeholderTextColor="#5C4E3D"
+                  secureTextEntry={!showPassword}
+                  className="flex-1 py-3.5 text-white"
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  className="p-1 ml-2"
+                  activeOpacity={0.7}
+                >
+                  <Icon name={showPassword ? 'eye-off' : 'eye'} size={20} color="#8A8276" />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
 

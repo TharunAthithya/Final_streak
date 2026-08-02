@@ -17,6 +17,7 @@ interface RoomState {
   createRoom: (apiClient: StreakApiClient, dto: CreateRoomDto) => Promise<void>;
   joinRoom: (apiClient: StreakApiClient, dto: JoinRoomDto) => Promise<any>;
   leaveRoom: (apiClient: StreakApiClient, roomId: string) => Promise<void>;
+  deleteRoom: (apiClient: StreakApiClient, roomId: string) => Promise<void>;
   fetchRoomDetails: (apiClient: StreakApiClient, roomId: string) => Promise<void>;
   fetchRoomActivities: (apiClient: StreakApiClient, roomId: string) => Promise<void>;
   fetchRoomMembers: (apiClient: StreakApiClient, roomId: string) => Promise<void>;
@@ -79,6 +80,18 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       set({ rooms: data, selectedRoomDetails: null, loading: false });
     } catch (e: any) {
       set({ error: e.message || 'Failed to leave room', loading: false });
+      throw e;
+    }
+  },
+
+  deleteRoom: async (apiClient, roomId) => {
+    set({ loading: true, error: null });
+    try {
+      await apiClient.deleteRoom(roomId);
+      const data = await apiClient.getRooms();
+      set({ rooms: data, selectedRoomDetails: null, loading: false });
+    } catch (e: any) {
+      set({ error: e.message || 'Failed to delete room', loading: false });
       throw e;
     }
   },

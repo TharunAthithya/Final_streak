@@ -49,9 +49,9 @@ export const RecentSessionsStrip: React.FC<RecentSessionsStripProps> = ({
         innerBgColor = 'bg-[#E8C08A]';
         innerBorderColor = 'border-[#E8C08A]';
       } else if (status === 'freeze') {
-        outerBorderColor = 'border-slate-500';
-        innerBgColor = 'bg-slate-500';
-        innerBorderColor = 'border-slate-500';
+        outerBorderColor = 'border-[#38BDF8]';
+        innerBgColor = 'bg-[#38BDF8]';
+        innerBorderColor = 'border-[#38BDF8]';
       } else if (status === 'missed') {
         outerBorderColor = 'border-[#E8899A]';
         innerBgColor = 'bg-[#E8899A]';
@@ -82,7 +82,7 @@ export const RecentSessionsStrip: React.FC<RecentSessionsStripProps> = ({
           dotStyle += ' w-2.5 h-2.5 bg-[#E8C08A]';
           break;
         case 'freeze':
-          dotStyle += ' w-2.5 h-2.5 bg-slate-500';
+          dotStyle += ' w-2.5 h-2.5 bg-[#38BDF8]';
           break;
         case 'missed':
           dotStyle += ' w-2.5 h-2.5 bg-[#E8899A]';

@@ -18,6 +18,8 @@ import { RecentSessionsStrip } from './RecentSessionsStrip';
 import { CompletionButton } from './CompletionButton';
 import { AVAILABLE_HABIT_ICONS, resolveHabitIcon } from '../../utils/habit-icons';
 
+import { HabitResponse } from '@streak/contracts';
+
 interface CreateHabitBottomSheetProps {
   visible: boolean;
   onClose: () => void;
@@ -29,6 +31,14 @@ interface CreateHabitBottomSheetProps {
     daysOfWeek?: number[];
   }) => Promise<void>;
   loading: boolean;
+  initialHabit?: HabitResponse | null;
+  onUpdate?: (habitData: {
+    name: string;
+    description?: string;
+    icon: string;
+    scheduleType: 'DAILY' | 'SPECIFIC_DAYS';
+    daysOfWeek?: number[];
+  }) => Promise<void>;
 }
 
 export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
@@ -36,6 +46,8 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
   onClose,
   onCreate,
   loading,
+  initialHabit,
+  onUpdate,
 }) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -44,6 +56,27 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
   const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4, 5]); // Mon-Fri default
   const [nameError, setNameError] = useState('');
   const [touchedName, setTouchedName] = useState(false);
+
+  // Pre-populate when initialHabit is provided
+  useEffect(() => {
+    if (visible) {
+      if (initialHabit) {
+        setName(initialHabit.name || '');
+        setDescription(initialHabit.description || '');
+        setSelectedIcon(initialHabit.icon || 'target');
+        setScheduleType((initialHabit.scheduleType as any) || 'DAILY');
+        setSelectedDays((initialHabit as any).daysOfWeek || [1, 2, 3, 4, 5]);
+      } else {
+        setName('');
+        setDescription('');
+        setSelectedIcon('target');
+        setScheduleType('DAILY');
+        setSelectedDays([1, 2, 3, 4, 5]);
+      }
+      setTouchedName(false);
+      setNameError('');
+    }
+  }, [visible, initialHabit]);
 
   // Group icons by category
   const groupedIcons = AVAILABLE_HABIT_ICONS.reduce<Record<string, typeof AVAILABLE_HABIT_ICONS>>((acc, icon) => {
@@ -105,13 +138,23 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
     }
 
     try {
-      await onCreate({
-        name: name.trim(),
-        description: description.trim() || undefined,
-        icon: selectedIcon,
-        scheduleType,
-        daysOfWeek: scheduleType === 'SPECIFIC_DAYS' ? selectedDays : undefined,
-      });
+      if (initialHabit && onUpdate) {
+        await onUpdate({
+          name: name.trim(),
+          description: description.trim() || undefined,
+          icon: selectedIcon,
+          scheduleType,
+          daysOfWeek: scheduleType === 'SPECIFIC_DAYS' ? selectedDays : undefined,
+        });
+      } else {
+        await onCreate({
+          name: name.trim(),
+          description: description.trim() || undefined,
+          icon: selectedIcon,
+          scheduleType,
+          daysOfWeek: scheduleType === 'SPECIFIC_DAYS' ? selectedDays : undefined,
+        });
+      }
       // Reset form
       setName('');
       setDescription('');
@@ -190,10 +233,10 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
               {/* Header */}
               <View className="mb-6">
                 <Text className="text-3xl font-bold text-[#F5F2EC] tracking-tight mb-1" style={{ fontFamily: 'Baloo 2' }}>
-                  New Habit
+                  {initialHabit ? 'Edit Habit' : 'New Habit'}
                 </Text>
                 <Text className="text-sm text-[#9C958C] font-medium">
-                  Make a promise you'll want to keep.
+                  {initialHabit ? 'Refine your habit commitment.' : "Make a promise you'll want to keep."}
                 </Text>
               </View>
 
@@ -410,7 +453,7 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
                         isFormValid ? 'text-[#241C14]' : 'text-[#9C958C]'
                       }`}
                     >
-                      Create Promise
+                      {initialHabit ? 'Save Changes' : 'Create Promise'}
                     </Text>
                   )}
                 </TouchableOpacity>

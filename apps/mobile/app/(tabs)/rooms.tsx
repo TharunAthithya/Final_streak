@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   Text,
   View,
@@ -10,13 +11,21 @@ import {
 } from 'react-native';
 import { useAuthStore } from '../../src/store/auth-store';
 import { useRoomStore } from '../../src/store/room-store';
+import { useHabitStore } from '../../src/store/habit-store';
+import { useSyncStore } from '../../src/store/sync-store';
 import { Icon } from '../../src/components/ui/Icon';
-import { RoomChatFeed, RoomFeedItem } from '../../src/components/rooms/RoomChatFeed';
 import { RoomInfoSheet } from '../../src/components/rooms/RoomInfoSheet';
+import { InviteMemberModal } from '../../src/components/rooms/InviteMemberModal';
+import { CreateRoomModal } from '../../src/components/rooms/CreateRoomModal';
+import { RoomDetailsHub } from '../../src/components/rooms/RoomDetailsHub';
 import { ReactionKind } from '../../src/components/rooms/ReactionPill';
+import { toLocalDateString } from '../../src/utils/streak';
 
 export default function RoomsScreen() {
   const { user, apiClient } = useAuthStore();
+  const { habits, fetchHabits, createHabit, checkInHabit } = useHabitStore();
+  const { enqueueCompleteHabit } = useSyncStore();
+  const isOfflineMode = false;
   const {
     rooms,
     selectedRoomDetails: roomDetails,
@@ -25,8 +34,9 @@ export default function RoomsScreen() {
     loading,
     loadingDetails,
     fetchRooms,
-    createRoom,
     joinRoom,
+    leaveRoom,
+    deleteRoom,
     fetchRoomDetails,
     fetchRoomActivities,
     fetchRoomMembers,
@@ -35,15 +45,22 @@ export default function RoomsScreen() {
 
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [showInfoSheet, setShowInfoSheet] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+
+  // Reset selected room view whenever user navigates away from Rooms tab
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        setSelectedRoomId(null);
+        setShowInfoSheet(false);
+        setShowInviteModal(false);
+      };
+    }, [])
+  );
 
   // Forms Visibility
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
-
-  // Create Form State
-  const [roomName, setRoomName] = useState('');
-  const [roomDesc, setRoomDesc] = useState('');
-  const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>('PUBLIC');
 
   // Join Form State
   const [inviteCode, setInviteCode] = useState('');
@@ -57,24 +74,41 @@ export default function RoomsScreen() {
       fetchRoomDetails(apiClient, selectedRoomId);
       fetchRoomActivities(apiClient, selectedRoomId);
       fetchRoomMembers(apiClient, selectedRoomId);
+
+      // Supabase Realtime Subscription for Activity Feed & Reactions
+      const channel = apiClient.supabase
+        .channel(`room-realtime-${selectedRoomId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'activities',
+            filter: `room_id=eq.${selectedRoomId}`,
+          },
+          () => {
+            fetchRoomActivities(apiClient, selectedRoomId);
+            fetchRoomMembers(apiClient, selectedRoomId);
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'reactions',
+          },
+          () => {
+            fetchRoomActivities(apiClient, selectedRoomId);
+          }
+        )
+        .subscribe();
+
+      return () => {
+        apiClient.supabase.removeChannel(channel);
+      };
     }
   }, [selectedRoomId]);
-
-  const handleCreateRoom = async () => {
-    if (!roomName.trim()) return;
-    try {
-      await createRoom(apiClient, {
-        name: roomName.trim(),
-        description: roomDesc.trim() || undefined,
-        visibility,
-      });
-      setRoomName('');
-      setRoomDesc('');
-      setShowCreate(false);
-    } catch (e: any) {
-      Alert.alert('Error', e.message);
-    }
-  };
 
   const handleJoinRoom = async () => {
     if (!inviteCode.trim()) return;
@@ -96,141 +130,115 @@ export default function RoomsScreen() {
     await toggleActivityReaction(apiClient, activityId, reactionKind);
   };
 
-  // Convert room activities into rich chat feed items
-  const feedItems: RoomFeedItem[] = useMemo(() => {
-    if (!selectedRoomId || !roomDetails) return [];
+  const handleQuickCompleteHabit = async (habitName: string) => {
+    const todayStr = toLocalDateString(new Date());
+    const tz = user?.timezone || 'UTC';
 
-    const result: RoomFeedItem[] = [];
+    let targetHabit = habits.find((h) => h.name.toLowerCase() === habitName.toLowerCase());
 
-    // Origin marker
-    const originDateStr = roomDetails.created_at
-      ? new Date(roomDetails.created_at).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })
-      : 'recently';
-    result.push({
-      id: 'origin-marker',
-      kind: 'origin',
-      label: `Room created · ${originDateStr}`,
-    });
-
-    let lastDateStr = '';
-    let lastActor = '';
-
-    roomActivities.forEach((act, idx) => {
-      const dateObj = new Date(act.createdAt);
-      const dateLabel = dateObj.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
-      const timeLabel = dateObj.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-
-      // Date divider if day changed
-      if (dateLabel !== lastDateStr) {
-        lastDateStr = dateLabel;
-        result.push({
-          id: `date-${dateLabel}-${idx}`,
-          kind: 'date',
-          label: dateLabel,
+    // If user does not have a personal habit matching this room habit yet, auto-create it
+    if (!targetHabit) {
+      try {
+        targetHabit = await createHabit(apiClient, {
+          name: habitName,
+          scheduleType: 'DAILY' as any,
+          startDate: todayStr,
+          timezone: tz,
         });
-        lastActor = ''; // Reset run on new date
+      } catch (e: any) {
+        Alert.alert('Habit Creation Error', e.message || `Could not auto-create habit for "${habitName}".`);
+        return;
       }
+    }
 
-      if (act.type === 'ROOM_JOIN') {
-        result.push({
-          id: act.id,
-          kind: 'join',
-          name: act.actorDisplayName,
-          time: timeLabel,
-        });
-        lastActor = '';
-      } else {
-        // Message (habit complete check-in)
-        const isFirstInRun = act.actorDisplayName !== lastActor;
-        lastActor = act.actorDisplayName;
+    const key = `mobile-room-idemp-${targetHabit.id}-${todayStr}-${Date.now()}`;
 
-        result.push({
-          id: act.id,
-          kind: 'msg',
-          name: act.actorDisplayName,
-          habit: act.message || 'Completed a habit',
-          time: timeLabel,
-          isOwn: act.isOwn,
-          isFirstInRun,
-          isLastInRun: true,
-          reactions: act.reactions,
-        });
-      }
-    });
+    await checkInHabit(
+      apiClient,
+      targetHabit.id,
+      todayStr,
+      tz,
+      key,
+      isOfflineMode,
+      enqueueCompleteHabit
+    );
 
-    return result;
-  }, [selectedRoomId, roomDetails, roomActivities]);
+    await fetchHabits(apiClient);
+    if (selectedRoomId) {
+      await fetchRoomActivities(apiClient, selectedRoomId);
+      await fetchRoomMembers(apiClient, selectedRoomId);
+    }
+  };
 
-  // SELECTED ROOM DETAIL VIEW (WhatsApp Chat Feed Style)
+  const handleLeaveSelectedRoom = async () => {
+    if (!selectedRoomId) return;
+    await leaveRoom(apiClient, selectedRoomId);
+    setSelectedRoomId(null);
+  };
+
+  const handleDeleteSelectedRoom = async () => {
+    if (!selectedRoomId) return;
+    await deleteRoom(apiClient, selectedRoomId);
+    setSelectedRoomId(null);
+  };
+
+  const existingMemberIds = useMemo(() => {
+    return new Set(roomMembers.map((m: any) => m.user?.id || m.profileId).filter(Boolean));
+  }, [roomMembers]);
+
+  const pendingInviteeIds = useMemo(() => {
+    return new Set(
+      roomMembers
+        .filter((m: any) => m.role === 'PENDING' || m.status === 'PENDING')
+        .map((m: any) => m.user?.id || m.profileId)
+        .filter(Boolean)
+    );
+  }, [roomMembers]);
+
+  // SELECTED ROOM DETAIL HUB VIEW
   if (selectedRoomId && roomDetails) {
     return (
       <View className="flex-1 bg-[#0B0B0C]">
-        {/* Header Bar */}
-        <View className="px-5 pt-14 pb-4 border-b border-[#1C1815] bg-[#0B0B0C]">
-          <View className="flex-row items-center space-x-3">
-            {/* Back Button */}
-            <TouchableOpacity
-              onPress={() => setSelectedRoomId(null)}
-              className="w-9 h-9 bg-[#18140F] border border-[#2B2521] rounded-full items-center justify-center mr-2"
-            >
-              <Icon name="arrow-left" size={16} color="#F5F2EC" />
-            </TouchableOpacity>
-
-            {/* Room Title Header (Tappable for Info Sheet) */}
-            <TouchableOpacity
-              onPress={() => setShowInfoSheet(true)}
-              className="flex-1 flex-row items-center min-w-0"
-            >
-              <View className="w-9 h-9 bg-[#3A2E1F] border border-[#E8C08A]/30 rounded-xl items-center justify-center mr-2.5 shrink-0">
-                <Icon name="rooms" size={18} color="#E8C08A" />
-              </View>
-              <View className="flex-1 min-w-0">
-                <Text numberOfLines={1} className="text-base font-bold text-[#F5F2EC] leading-tight">
-                  {roomDetails.name}
-                </Text>
-                <Text className="text-[11px] text-[#65605A]">Tap for room info</Text>
-              </View>
-              <Icon name="chevron-right" size={16} color="#65605A" className="ml-1" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Room Badges Row */}
-          <View className="flex-row items-center space-x-2 mt-3.5">
-            <View className="bg-[#1B1512] border border-[#2B2521] px-2.5 py-1 rounded-full flex-row items-center mr-2">
-              <Icon name="fire" size={12} color="#E8A05A" className="mr-1" />
-              <Text className="text-[11.5px] font-semibold text-[#F5F2EC]">
-                {roomDetails.streak || 4} day streak
-              </Text>
-            </View>
-            <View className="bg-[#1B1512] border border-[#2B2521] px-2.5 py-1 rounded-full flex-row items-center">
-              <View className="w-1.5 h-1.5 rounded-full bg-[#E8C08A] mr-1.5" />
-              <Text className="text-[11.5px] font-semibold text-[#F5F2EC]">
-                {roomMembers.length || 1} active member{roomMembers.length === 1 ? '' : 's'}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Chat Feed */}
-        {loadingDetails ? (
-          <ActivityIndicator size="large" color="#E8C08A" className="mt-10" />
-        ) : (
-          <RoomChatFeed items={feedItems} onToggleReaction={handleToggleReaction} />
-        )}
+        <RoomDetailsHub
+          roomDetails={roomDetails}
+          roomMembers={roomMembers}
+          roomActivities={roomActivities}
+          userHabits={habits}
+          currentUserId={user?.id}
+          loadingDetails={loadingDetails}
+          apiClient={apiClient}
+          onBack={() => setSelectedRoomId(null)}
+          onOpenRoomInfo={() => setShowInfoSheet(true)}
+          onLeaveRoom={handleLeaveSelectedRoom}
+          onDeleteRoom={handleDeleteSelectedRoom}
+          onToggleReaction={handleToggleReaction}
+          onQuickCompleteHabit={handleQuickCompleteHabit}
+        />
 
         {/* Room Info Bottom Sheet */}
         <RoomInfoSheet
           visible={showInfoSheet}
-          roomName={roomDetails.name}
-          description={roomDetails.description}
-          inviteCode={roomDetails.inviteCode}
-          memberCount={roomMembers.length}
-          activeTodayCount={1}
+          roomDetails={roomDetails}
           members={roomMembers}
           apiClient={apiClient}
           roomId={selectedRoomId}
           isOwner={roomDetails.ownerId === user?.id}
           onClose={() => setShowInfoSheet(false)}
+          onOpenInviteModal={() => setShowInviteModal(true)}
+          onLeaveRoom={handleLeaveSelectedRoom}
+          onDeleteRoom={handleDeleteSelectedRoom}
+        />
+
+        {/* Invite Member Bottom Sheet */}
+        <InviteMemberModal
+          visible={showInviteModal}
+          roomId={selectedRoomId}
+          inviteCode={roomDetails.inviteCode}
+          existingMemberIds={existingMemberIds}
+          pendingInviteeIds={pendingInviteeIds}
+          apiClient={apiClient}
+          onClose={() => setShowInviteModal(false)}
+          onInvitationSent={() => fetchRoomMembers(apiClient, selectedRoomId)}
         />
       </View>
     );
@@ -250,7 +258,7 @@ export default function RoomsScreen() {
         <View className="flex-row mb-8">
           <TouchableOpacity
             onPress={() => {
-              setShowCreate(!showCreate);
+              setShowCreateModal(true);
               setShowJoin(false);
             }}
             className="flex-1 bg-[#E8C08A] py-3.5 rounded-xl items-center flex-row justify-center mr-2 shadow-sm"
@@ -261,7 +269,7 @@ export default function RoomsScreen() {
           <TouchableOpacity
             onPress={() => {
               setShowJoin(!showJoin);
-              setShowCreate(false);
+              setShowCreateModal(false);
             }}
             className="flex-1 bg-[#181513] border border-[#2B2521] py-3.5 rounded-xl items-center flex-row justify-center ml-2 shadow-sm"
           >
@@ -270,64 +278,19 @@ export default function RoomsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Create Form */}
-        {showCreate && (
-          <View className="bg-[#181513] border border-[#2B2521] p-5 rounded-2xl mb-6 shadow-sm">
-            <Text className="text-base font-bold text-[#F5F2EC] mb-4">Create Room</Text>
-            <Text className="text-xs font-semibold text-[#65605A] uppercase tracking-wider mb-2">Room Name</Text>
-            <TextInput
-              value={roomName}
-              onChangeText={setRoomName}
-              placeholder="e.g. Coding beginner"
-              placeholderTextColor="#65605A"
-              className="px-4 py-3 bg-[#0B0B0C] border border-[#2B2521] text-[#F5F2EC] rounded-xl mb-4"
-            />
-            <Text className="text-xs font-semibold text-[#65605A] uppercase tracking-wider mb-2">Description</Text>
-            <TextInput
-              value={roomDesc}
-              onChangeText={setRoomDesc}
-              placeholder="Daily coding, everyone..."
-              placeholderTextColor="#65605A"
-              className="px-4 py-3 bg-[#0B0B0C] border border-[#2B2521] text-[#F5F2EC] rounded-xl mb-4"
-            />
-            <Text className="text-xs font-semibold text-[#65605A] uppercase tracking-wider mb-2">Visibility</Text>
-            <View className="flex-row mb-4">
-              <TouchableOpacity
-                onPress={() => setVisibility('PUBLIC')}
-                className={`flex-1 py-3 px-2 items-center justify-center rounded-xl mr-2 ${
-                  visibility === 'PUBLIC' ? 'bg-[#E8C08A]' : 'bg-[#181513] border border-[#2B2521]'
-                }`}
-              >
-                <Text className={`font-bold text-xs ${visibility === 'PUBLIC' ? 'text-[#241C14]' : 'text-[#F5F2EC]'}`}>
-                  Public
-                </Text>
-                <Text className={`text-[10px] mt-0.5 ${visibility === 'PUBLIC' ? 'text-[#241C14]/80' : 'text-[#65605A]'}`}>
-                  Direct Join
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => setVisibility('PRIVATE')}
-                className={`flex-1 py-3 px-2 items-center justify-center rounded-xl ml-2 ${
-                  visibility === 'PRIVATE' ? 'bg-[#E8C08A]' : 'bg-[#181513] border border-[#2B2521]'
-                }`}
-              >
-                <Text className={`font-bold text-xs ${visibility === 'PRIVATE' ? 'text-[#241C14]' : 'text-[#F5F2EC]'}`}>
-                  Private
-                </Text>
-                <Text className={`text-[10px] mt-0.5 ${visibility === 'PRIVATE' ? 'text-[#241C14]/80' : 'text-[#65605A]'}`}>
-                  Requires Approval
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity
-              onPress={handleCreateRoom}
-              className="bg-[#E8C08A] py-3.5 rounded-xl items-center"
-            >
-              <Text className="text-[#241C14] font-bold text-sm">Save Room</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* Multi-Step Create Room Modal */}
+        <CreateRoomModal
+          visible={showCreateModal}
+          userHabits={habits}
+          apiClient={apiClient}
+          onClose={() => setShowCreateModal(false)}
+          onRoomCreated={(newRoom) => {
+            fetchRooms(apiClient);
+            if (newRoom && newRoom.id) {
+              setSelectedRoomId(newRoom.id);
+            }
+          }}
+        />
 
         {/* Join Form */}
         {showJoin && (

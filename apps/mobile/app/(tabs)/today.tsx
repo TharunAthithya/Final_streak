@@ -15,7 +15,7 @@ import { useSyncStore } from '../../src/store/sync-store';
 import { useHabitStore } from '../../src/store/habit-store';
 import { useNotificationStore } from '../../src/store/notification-store';
 import { HabitCard } from '../../src/components/habits/HabitCard';
-import { HabitDetailModal } from '../../src/components/habits/HabitDetailModal';
+import { HabitDetailsSheet } from '../../src/components/habits/HabitDetailsSheet';
 import { CreateHabitBottomSheet } from '../../src/components/habits/CreateHabitBottomSheet';
 import { NotificationBell } from '../../src/components/ui/NotificationBell';
 import { NotificationScreen } from '../../src/components/ui/NotificationScreen';
@@ -23,8 +23,10 @@ import { ProgressRing } from '../../src/components/habits/ProgressRing';
 import { SessionStatus } from '../../src/components/habits/RecentSessionsStrip';
 import NetInfo from '@react-native-community/netinfo';
 import { useHomeHero } from '../../src/hooks/useHomeHero';
-import { useBeforeYouBegin } from '../../src/hooks/useBeforeYouBegin';
-import { isHabitScheduledForDate, getHabitScheduleLabel, getSyncAwareHabits } from '../../src/utils/streak';
+import { useDailyStoryStore } from '../../src/store/daily-story-store';
+import { BeforeYouBeginCard } from '../../src/components/coaching/BeforeYouBeginCard';
+import { DailyStoryModal } from '../../src/components/coaching/DailyStoryModal';
+import { isHabitScheduledForDate, getHabitScheduleLabel, getSyncAwareHabits, toLocalDateString } from '../../src/utils/streak';
 import { Icon } from '../../src/components/ui/Icon';
 import { calculateCalendarGridStatuses, getCalendarGridDates, validateFreeze } from '../../src/utils/freeze';
 import { resolveHabitIcon } from '../../src/utils/habit-icons';
@@ -32,7 +34,7 @@ import { resolveHabitIcon } from '../../src/utils/habit-icons';
 export default function TodayScreen() {
   const { apiClient, user } = useAuthStore();
   const { pendingQueue, enqueueCompleteHabit, syncQueue, isSyncing, enqueueFreezeHabit } = useSyncStore();
-  const { habits, loading, fetchHabits, createHabit, checkInHabit, undoCheckIn, freezeHabit } = useHabitStore();
+  const { habits, loading, fetchHabits, createHabit, updateHabit, checkInHabit, undoCheckIn, freezeHabit } = useHabitStore();
   const { unreadCount, fetchNotifications } = useNotificationStore();
 
   const [isOfflineMode, setIsOfflineMode] = useState(false);
@@ -50,20 +52,16 @@ export default function TodayScreen() {
     percentageDone,
   } = useHomeHero();
 
-  const {
-    hasCompletedToday,
-    reflection,
-    draftText,
-    saveDraftText,
-    completeRitual,
-    currentPrompt,
-    refreshDate,
-  } = useBeforeYouBegin();
+  const { isCompletedForDate, getStoryForDate, completeStoryForDate } = useDailyStoryStore();
+  const [showDailyStoryModal, setShowDailyStoryModal] = useState(false);
+  const todayStr = toLocalDateString(new Date());
+  const isStoryCompletedToday = isCompletedForDate(todayStr);
+  const todayStory = getStoryForDate(todayStr);
 
-  // Ritual modal state
-  const [showRitual, setShowRitual] = useState(false);
-  const [ritualStep, setRitualStep] = useState<1 | 2>(1);
-  const [reflectionInput, setReflectionInput] = useState('');
+  const handleCompleteStory = async () => {
+    await completeStoryForDate(todayStr);
+    setShowDailyStoryModal(false);
+  };
 
   // See all habits modal state
   const [showAllHabits, setShowAllHabits] = useState(false);
@@ -76,14 +74,7 @@ export default function TodayScreen() {
     fetchNotifications(apiClient);
   }, []);
 
-  // Sync draft text to input when ritual opens
-  useEffect(() => {
-    if (showRitual) {
-      setReflectionInput(draftText || '');
-    }
-  }, [showRitual, draftText]);
-
-  // Network listener & AppState listener for offline detection & date refresh
+  // Network listener & AppState listener for offline detection
   useEffect(() => {
     const unsubscribeNet = NetInfo.addEventListener((state) => {
       const offline = !state.isConnected || !state.isInternetReachable;
@@ -95,7 +86,6 @@ export default function TodayScreen() {
 
     const subscriptionAppState = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
-        refreshDate();
         fetchHabits(apiClient);
         fetchNotifications(apiClient);
       }
@@ -107,10 +97,18 @@ export default function TodayScreen() {
     };
   }, [pendingQueue]);
 
-  // Filter habits scheduled for today
-  const todayStr = new Date().toISOString().split('T')[0];
+  // Filter & sort habits scheduled for today (Uncompleted habits at top, completed move to bottom)
   const syncAwareHabits = getSyncAwareHabits(habits, pendingQueue);
-  const todayHabits = syncAwareHabits.filter((h) => isHabitScheduledForDate(h, todayStr));
+  const todayHabits = syncAwareHabits
+    .filter((h) => isHabitScheduledForDate(h, todayStr))
+    .sort((a, b) => {
+      const aDone = (a as any).completedToday ? 1 : 0;
+      const bDone = (b as any).completedToday ? 1 : 0;
+      return aDone - bDone;
+    });
+  const selectedHabit = selectedHabitForDetail
+    ? syncAwareHabits.find((h) => h.id === selectedHabitForDetail.id) || selectedHabitForDetail
+    : null;
 
   const handleToggleCheckIn = async (habit: any) => {
     const isCompleted = (habit as any).completedToday;
@@ -175,7 +173,7 @@ export default function TodayScreen() {
         scheduleType: habitData.scheduleType,
         daysOfWeek: habitData.scheduleType === 'SPECIFIC_DAYS' ? habitData.daysOfWeek : undefined,
         timezone: user?.timezone || 'UTC',
-        startDate: new Date().toISOString().split('T')[0],
+        startDate: toLocalDateString(new Date()),
       });
       setShowCreate(false);
     } catch (e: any) {
@@ -194,6 +192,17 @@ export default function TodayScreen() {
       setSelectedHabitForDetail({
         ...selectedHabitForDetail,
         icon: newIcon,
+      });
+    }
+    await fetchHabits(apiClient);
+  };
+
+  const handleUpdateHabit = async (habitId: string, habitData: any) => {
+    await updateHabit(apiClient, habitId, habitData);
+    if (selectedHabitForDetail && selectedHabitForDetail.id === habitId) {
+      setSelectedHabitForDetail({
+        ...selectedHabitForDetail,
+        ...habitData,
       });
     }
     await fetchHabits(apiClient);
@@ -255,28 +264,20 @@ export default function TodayScreen() {
             <Text className="text-sm text-[#9C958C]">
               Day {promiseDay} of keeping your promise.
             </Text>
-            {hasCompletedToday ? (
-              <View className="mt-4 flex-row items-center">
-                <Icon name="check" size={16} color="#E8C08A" className="mr-1.5" />
-                <Text className="text-sm text-[#E8C08A] font-semibold">
-                  You've started today with intention.
-                </Text>
-              </View>
-            ) : (
-              <TouchableOpacity onPress={() => setShowRitual(true)} className="mt-4 flex-row items-center">
-                <Icon name="book" size={16} color="#F5F2EC" className="mr-1.5" />
-                <Text className="text-sm text-[#F5F2EC] font-medium underline">
-                  Before You Begin
-                </Text>
-                <Icon name="arrow-right" size={14} color="#F5F2EC" className="ml-1.5" />
-              </TouchableOpacity>
-            )}
           </View>
 
           {/* Notification Bell Icon */}
           <NotificationBell
             unreadCount={unreadCount}
             onPress={() => setShowNotifications(true)}
+          />
+        </View>
+
+        {/* Before You Begin Card (Stays visible all day, transitioning from Active to Reassuring Completed state) */}
+        <View className="px-6">
+          <BeforeYouBeginCard
+            isCompleted={isStoryCompletedToday}
+            onPressBegin={() => setShowDailyStoryModal(true)}
           />
         </View>
 
@@ -304,26 +305,29 @@ export default function TodayScreen() {
           </View>
         </View>
 
-        {/* Habit List Section */}
-        <View className="px-6 pb-24">
-          <View className="flex-row justify-between items-center mb-4">
-            <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest">
-              Today's Habits
-            </Text>
+        {/* Habits Header */}
+        <View className="px-6 mb-3 flex-row justify-between items-center">
+          <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest">
+            Today's Promises ({todayHabits.length})
+          </Text>
+          {todayHabits.length > 3 && (
             <TouchableOpacity onPress={() => setShowAllHabits(true)}>
               <Text className="text-xs font-semibold text-[#E8C08A]">See all</Text>
             </TouchableOpacity>
-          </View>
+          )}
+        </View>
 
-
-
+        {/* Habit Cards */}
+        <View className="px-6 pb-24">
           {loading ? (
             <ActivityIndicator size="large" color="#E8C08A" className="mt-10" />
           ) : todayHabits.length === 0 ? (
             <View className="bg-[#181513] border border-[#2B2521] p-8 rounded-2xl items-center mt-4">
               <Icon name="book" size={32} color="#E8C08A" className="mb-2" />
-              <Text className="text-base font-semibold text-[#F5F2EC]">No habits for today</Text>
-              <Text className="text-sm text-[#9C958C] text-center mt-1">Tap the plus button to create your first habit.</Text>
+              <Text className="text-base font-semibold text-[#F5F2EC]">No habits scheduled for today</Text>
+              <Text className="text-xs text-[#9C958C] mt-1 text-center">
+                Tap the + button below to create your first habit promise.
+              </Text>
             </View>
           ) : (
             todayHabits.map((habit) => {
@@ -352,16 +356,6 @@ export default function TodayScreen() {
         </View>
       </ScrollView>
 
-      {/* Habit Detail Modal */}
-      <HabitDetailModal
-        visible={!!selectedHabitForDetail}
-        habit={selectedHabitForDetail}
-        apiClient={apiClient}
-        onClose={() => setSelectedHabitForDetail(null)}
-        onDelete={handleDeleteHabit}
-        onUpdateIcon={handleUpdateHabitIcon}
-      />
-
       {/* Notification Screen Modal */}
       <NotificationScreen
         visible={showNotifications}
@@ -369,86 +363,14 @@ export default function TodayScreen() {
         onClose={() => setShowNotifications(false)}
       />
 
-      {/* Before You Begin Ritual Modal */}
-      <Modal
-        visible={showRitual}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowRitual(false)}
-      >
-        <View style={{ flex: 1, backgroundColor: '#0B0B0C' }} className="px-6 justify-center">
-          {ritualStep === 1 ? (
-            <View className="items-center">
-              <Text className="text-3xl text-[#E8C08A] font-bold mb-4">Before you begin...</Text>
-              <Text className="text-lg text-[#F5F2EC] text-center mb-2 font-medium">
-                Take a moment to remember why you're showing up today.
-              </Text>
-              <Text className="text-base text-[#9C958C] text-center mb-8">
-                Today's promise starts with one intentional decision.
-              </Text>
-
-              <TouchableOpacity
-                onPress={() => setRitualStep(2)}
-                className="w-full bg-[#E8C08A] py-4 rounded-xl items-center"
-              >
-                <Text className="text-[#241C14] font-bold text-base">Continue</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => setShowRitual(false)}
-                className="mt-4"
-              >
-                <Text className="text-[#9C958C] text-sm">Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View>
-              <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-3">Daily Reflection</Text>
-              <Text className="text-2xl text-[#F5F2EC] font-semibold mb-6">{currentPrompt}</Text>
-
-              <TextInput
-                multiline
-                numberOfLines={4}
-                maxLength={250}
-                placeholder="Type your reflection here (optional)..."
-                placeholderTextColor="#65605A"
-                value={reflectionInput}
-                onChangeText={(text) => {
-                  setReflectionInput(text);
-                  saveDraftText(text);
-                }}
-                className="bg-[#181513] border border-[#2B2521] rounded-2xl p-4 text-[#F5F2EC] text-base mb-2 h-32"
-                style={{ textAlignVertical: 'top' }}
-              />
-
-              <Text className="text-right text-xs text-[#9C958C] mb-8">
-                {reflectionInput.length} / 250 characters
-              </Text>
-
-              <TouchableOpacity
-                onPress={async () => {
-                  try {
-                    await completeRitual(reflectionInput);
-                    setShowRitual(false);
-                  } catch (e: any) {
-                    Alert.alert('Error', e.message);
-                  }
-                }}
-                className="bg-[#E8C08A] py-4 rounded-xl items-center mb-4"
-              >
-                <Text className="text-[#241C14] font-bold text-base">Begin Today</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => setShowRitual(false)}
-                className="items-center"
-              >
-                <Text className="text-[#9C958C] text-sm">Close and Save Draft</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      </Modal>
+      {/* Before You Begin Daily Story Coaching Modal */}
+      <DailyStoryModal
+        visible={showDailyStoryModal}
+        story={todayStory}
+        isReadonly={isStoryCompletedToday}
+        onClose={() => setShowDailyStoryModal(false)}
+        onComplete={handleCompleteStory}
+      />
 
       {/* See All Habits Modal */}
       <Modal
@@ -498,6 +420,21 @@ export default function TodayScreen() {
           </ScrollView>
         </View>
       </Modal>
+
+      {/* Habit Details Sheet */}
+      <HabitDetailsSheet
+        visible={!!selectedHabitForDetail}
+        habit={selectedHabit}
+        apiClient={apiClient}
+        onClose={() => setSelectedHabitForDetail(null)}
+        onDelete={handleDeleteHabit}
+        onUpdateHabit={handleUpdateHabit}
+        onFreezeHabit={async (habitId, dateStr) => {
+          await handleFreezeHabit(habitId, dateStr);
+          await fetchHabits(apiClient);
+        }}
+        onToggleComplete={() => selectedHabit && handleToggleCheckIn(selectedHabit)}
+      />
 
       {/* Create Habit Bottom Sheet */}
       <CreateHabitBottomSheet

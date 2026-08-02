@@ -47,6 +47,7 @@ interface HabitState {
     isOffline: boolean,
     enqueueUndoFreeze: (habitId: string, localDate: string, timezone: string, idempotencyKey: string, checkInId?: string) => Promise<void>
   ) => Promise<void>;
+  updateHabit: (apiClient: StreakApiClient, habitId: string, dto: Partial<CreateHabitDto>) => Promise<void>;
 }
 
 export const useHabitStore = create<HabitState>((set, get) => ({
@@ -75,6 +76,18 @@ export const useHabitStore = create<HabitState>((set, get) => ({
       return newHabit;
     } catch (e: any) {
       set({ error: e.message || 'Failed to create habit', loading: false });
+      throw e;
+    }
+  },
+
+  updateHabit: async (apiClient, habitId, dto) => {
+    set({ loading: true, error: null });
+    try {
+      await apiClient.updateHabit(habitId, dto);
+      const data = await apiClient.getHabits();
+      set({ habits: data, loading: false });
+    } catch (e: any) {
+      set({ error: e.message || 'Failed to update habit', loading: false });
       throw e;
     }
   },

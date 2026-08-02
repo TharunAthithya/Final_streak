@@ -187,7 +187,7 @@ export function getSyncAwareHabits(habits: HabitResponse[], pendingQueue: any[])
     let completedToday = !!habit.completedToday;
     let todayCheckInId = habit.todayCheckInId;
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = toLocalDateString(new Date());
 
     // Apply RPCs sequentially in queue order
     for (const rpc of rpcs) {

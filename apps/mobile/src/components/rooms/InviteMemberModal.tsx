@@ -8,8 +8,11 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Share,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { Icon } from '../ui/Icon';
+import { Avatar } from './Avatar';
 import { StreakApiClient } from '@streak/api-client';
 
 interface SearchResult {
@@ -22,28 +25,36 @@ interface SearchResult {
 interface InviteMemberModalProps {
   visible: boolean;
   roomId: string;
+  inviteCode?: string;
+  existingMemberIds?: Set<string>;
+  pendingInviteeIds?: Set<string>;
   apiClient: StreakApiClient;
   onClose: () => void;
+  onInvitationSent?: (user: SearchResult) => void;
 }
 
 export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({
   visible,
   roomId,
+  inviteCode = 'CODE-7F3K9',
+  existingMemberIds = new Set(),
+  pendingInviteeIds = new Set(),
   apiClient,
   onClose,
+  onInvitationSent,
 }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
-  const [sending, setSending] = useState<string | null>(null);
-  const [sentIds, setSentIds] = useState<Set<string>>(new Set());
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [localPendingIds, setLocalPendingIds] = useState<Set<string>>(new Set());
+  const [copied, setCopied] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSearch = useCallback(
     (text: string) => {
       setQuery(text);
 
-      // Clear previous debounce
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
       }
@@ -53,7 +64,6 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({
         return;
       }
 
-      // Debounced search (300ms)
       debounceRef.current = setTimeout(async () => {
         setSearching(true);
         try {
@@ -71,54 +81,75 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({
   );
 
   const handleSendInvite = async (user: SearchResult) => {
-    setSending(user.id);
+    setSendingId(user.id);
     try {
       await apiClient.sendRoomInvitation(roomId, user.id);
-      setSentIds((prev) => new Set(prev).add(user.id));
-      Alert.alert('Invitation Sent!', `@${user.username} will receive a notification.`);
+      setLocalPendingIds((prev) => new Set(prev).add(user.id));
+      if (onInvitationSent) {
+        onInvitationSent(user);
+      }
+      Alert.alert('Invitation Sent', `@${user.username} will receive a notification.`);
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to send invitation');
+      Alert.alert('Invite Error', e.message || 'Failed to send room invitation.');
     } finally {
-      setSending(null);
+      setSendingId(null);
+    }
+  };
+
+  const handleCopyLink = async () => {
+    const inviteLink = `https://streak.app/join/${inviteCode}`;
+    await Clipboard.setStringAsync(inviteLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleShareLink = async () => {
+    try {
+      const inviteLink = `https://streak.app/join/${inviteCode}`;
+      await Share.share({
+        message: `Join my room on Streak to keep daily promises together! Code: ${inviteCode}\n${inviteLink}`,
+      });
+    } catch (e: any) {
+      console.warn('Share error:', e);
     }
   };
 
   const handleClose = () => {
     setQuery('');
     setResults([]);
-    setSentIds(new Set());
+    setLocalPendingIds(new Set());
     onClose();
   };
 
   const renderUserItem = ({ item }: { item: SearchResult }) => {
-    const alreadySent = sentIds.has(item.id);
+    const isMember = existingMemberIds.has(item.id);
+    const isPending = pendingInviteeIds.has(item.id) || localPendingIds.has(item.id);
 
     return (
-      <View className="flex-row items-center py-3.5 border-b border-[#2B2521]">
-        {/* Avatar */}
-        <View className="w-10 h-10 bg-[#221C16] border border-[#3A2E1F] rounded-full items-center justify-center mr-3">
-          <Icon name="user" size={18} color="#E8C08A" />
-        </View>
+      <View className="flex-row items-center py-3 px-3 bg-[#181513] border border-[#2B2521] rounded-xl mb-2.5">
+        <Avatar name={item.displayName} size={36} />
 
-        {/* User Info */}
-        <View className="flex-1">
-          <Text className="text-sm font-semibold text-[#F5F2EC]">{item.displayName}</Text>
+        <View className="flex-1 ml-3">
+          <Text className="text-sm font-bold text-[#F5F2EC]">{item.displayName}</Text>
           <Text className="text-xs text-[#9C958C]">@{item.username}</Text>
         </View>
 
-        {/* Send / Sent Button */}
-        {alreadySent ? (
-          <View className="px-4 py-2 bg-[#2A2013] border border-[#3A2E1F] rounded-xl flex-row items-center">
-            <Icon name="check" size={12} color="#E8C08A" className="mr-1" />
-            <Text className="text-xs font-semibold text-[#E8C08A]">Sent</Text>
+        {isMember ? (
+          <View className="px-3 py-1 bg-[#1C2C22] border border-[#8FBF9E]/40 rounded-full flex-row items-center">
+            <View className="w-1.5 h-1.5 rounded-full bg-[#8FBF9E] mr-1" />
+            <Text className="text-[11px] font-bold text-[#8FBF9E]">Joined</Text>
+          </View>
+        ) : isPending ? (
+          <View className="px-3 py-1 bg-[#332415] border border-[#D97706]/40 rounded-full">
+            <Text className="text-[11px] font-bold text-[#F59E0B]">Invitation Pending</Text>
           </View>
         ) : (
           <TouchableOpacity
             onPress={() => handleSendInvite(item)}
-            disabled={sending === item.id}
-            className="px-4 py-2 bg-[#E8C08A] rounded-xl flex-row items-center"
+            disabled={sendingId === item.id}
+            className="px-4 py-1.5 bg-[#E8C08A] rounded-xl flex-row items-center"
           >
-            {sending === item.id ? (
+            {sendingId === item.id ? (
               <ActivityIndicator size="small" color="#241C14" />
             ) : (
               <Text className="text-xs font-bold text-[#241C14]">Invite</Text>
@@ -136,52 +167,108 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({
       transparent
       onRequestClose={handleClose}
     >
-      <View style={{ flex: 1, backgroundColor: '#0B0B0C' }}>
-        {/* Header */}
-        <View className="px-6 pt-6 pb-4 border-b border-[#2B2521] flex-row justify-between items-center">
-          <TouchableOpacity onPress={handleClose} className="p-2">
-            <Icon name="arrow-left" size={20} color="#9C958C" />
-          </TouchableOpacity>
-          <Text className="text-lg font-bold text-[#F5F2EC]">Invite Member</Text>
-          <View className="w-10" />
-        </View>
+      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.7)' }}>
+        <TouchableOpacity style={{ flex: 1 }} onPress={handleClose} activeOpacity={1} />
 
-        {/* Search Bar */}
-        <View className="px-6 pt-5 pb-3">
-          <View className="flex-row items-center bg-[#181513] border border-[#2B2521] rounded-xl px-4 py-3">
-            <Icon name="user" size={16} color="#9C958C" className="mr-2" />
-            <TextInput
-              value={query}
-              onChangeText={handleSearch}
-              placeholder="Search by @username..."
-              placeholderTextColor="#65605A"
-              autoCapitalize="none"
-              autoCorrect={false}
-              className="flex-1 text-[#F5F2EC] text-sm"
+        <View
+          style={{
+            backgroundColor: '#141110',
+            borderTopLeftRadius: 28,
+            borderTopRightRadius: 28,
+            borderTopWidth: 1,
+            borderColor: '#2B2521',
+            maxHeight: '88%',
+            minHeight: 520,
+          }}
+          className="relative px-6 pt-3 pb-8"
+        >
+          {/* Drag Handle */}
+          <View className="items-center pb-3">
+            <View className="w-10 h-1 rounded-full bg-[#2B2521]" />
+          </View>
+
+          {/* Sheet Header */}
+          <View className="flex-row items-center justify-between pb-3 border-b border-[#2B2521]">
+            <Text className="text-lg font-bold text-[#F5F2EC]" style={{ fontFamily: 'Baloo 2' }}>
+              Invite Member
+            </Text>
+            <TouchableOpacity
+              onPress={handleClose}
+              className="w-8 h-8 rounded-full bg-[#221D1A] border border-[#2B2521] items-center justify-center"
+            >
+              <Icon name="x" size={15} color="#9C958C" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Primary Method: Username Search */}
+          <View className="pt-4 pb-2">
+            <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-2">
+              SEARCH BY USERNAME
+            </Text>
+            <View className="flex-row items-center bg-[#181513] border border-[#2B2521] rounded-xl px-3.5 py-2.5">
+              <Text className="text-sm font-semibold text-[#65605A] mr-1">@</Text>
+              <TextInput
+                value={query}
+                onChangeText={handleSearch}
+                placeholder="username"
+                placeholderTextColor="#65605A"
+                autoCapitalize="none"
+                autoCorrect={false}
+                className="flex-1 text-[#F5F2EC] text-sm"
+              />
+              {searching && <ActivityIndicator size="small" color="#E8C08A" />}
+            </View>
+          </View>
+
+          {/* Search Results List */}
+          <View className="flex-1 my-2">
+            <FlatList
+              data={results}
+              keyExtractor={(item) => item.id}
+              renderItem={renderUserItem}
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={
+                query.trim().length >= 2 && !searching ? (
+                  <View className="items-center py-8 bg-[#181513] border border-[#2B2521] rounded-2xl">
+                    <Icon name="user" size={24} color="#65605A" className="mb-2" />
+                    <Text className="text-xs text-[#9C958C]">No users found matching "{query}"</Text>
+                  </View>
+                ) : query.trim().length < 2 ? (
+                  <View className="items-center py-8">
+                    <Text className="text-xs text-[#65605A]">Type @username to search registered users</Text>
+                  </View>
+                ) : null
+              }
             />
-            {searching && <ActivityIndicator size="small" color="#E8C08A" />}
+          </View>
+
+          {/* Secondary Method: Invite with Link */}
+          <View className="pt-3 border-t border-[#2B2521]">
+            <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-2.5">
+              INVITE WITH LINK
+            </Text>
+
+            <View className="flex-row gap-2">
+              <TouchableOpacity
+                onPress={handleCopyLink}
+                className="flex-1 bg-[#241E1A] border border-[#2B2521] py-2.5 rounded-xl items-center flex-row justify-center"
+              >
+                <Icon name={copied ? 'check' : 'copy'} size={14} color={copied ? '#8FBF9E' : '#E8C08A'} className="mr-1.5" />
+                <Text className={`text-xs font-bold ${copied ? 'text-[#8FBF9E]' : 'text-[#F5F2EC]'}`}>
+                  {copied ? 'Copied Link' : 'Copy Link'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleShareLink}
+                className="flex-1 bg-[#241E1A] border border-[#2B2521] py-2.5 rounded-xl items-center flex-row justify-center"
+              >
+                <Icon name="arrow-right" size={14} color="#E8C08A" className="mr-1.5" />
+                <Text className="text-xs font-bold text-[#F5F2EC]">Share Link</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-
-        {/* Results */}
-        <FlatList
-          data={results}
-          keyExtractor={(item) => item.id}
-          renderItem={renderUserItem}
-          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 40 }}
-          ListEmptyComponent={
-            query.length >= 2 && !searching ? (
-              <View className="items-center py-12">
-                <Icon name="user" size={28} color="#9C958C" className="mb-3" />
-                <Text className="text-sm text-[#9C958C]">No users found matching "@{query}"</Text>
-              </View>
-            ) : query.length < 2 ? (
-              <View className="items-center py-12">
-                <Text className="text-sm text-[#9C958C]">Type at least 2 characters to search</Text>
-              </View>
-            ) : null
-          }
-        />
       </View>
     </Modal>
   );

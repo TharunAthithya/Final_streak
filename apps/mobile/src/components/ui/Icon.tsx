@@ -59,6 +59,8 @@ const featherIconMap: Record<string, keyof typeof Feather.glyphMap> = {
   info: 'info',
   freeze: 'wind',
   edit: 'edit',
+  eye: 'eye',
+  'eye-off': 'eye-off',
 };
 
 export const Icon: React.FC<IconProps> = ({
