@@ -65,6 +65,7 @@ export declare class StreakApiClient {
             user: UserResponse;
         }>;
     }>;
+    extendRoomDuration(roomId: string, additionalDays: number): Promise<any>;
     createRoomHabit(roomId: string, name: string, description?: string): Promise<any>;
     archiveRoomHabit(roomId: string, roomHabitId: string): Promise<any>;
     linkPersonalHabit(roomId: string, roomHabitId: string, personalHabitId: string): Promise<any>;
@@ -102,6 +103,10 @@ export declare class StreakApiClient {
     getReflectionForDate(localDate: string): Promise<ReflectionResponse | null>;
     submitReflection(dto: CreateReflectionDto): Promise<ReflectionResponse>;
     updateHabitIcon(habitId: string, iconName: string): Promise<any>;
+    updateHabit(habitId: string, dto: any): Promise<any>;
+    deleteRoom(roomId: string): Promise<{
+        success: boolean;
+    }>;
     getNotifications(): Promise<any[]>;
     markNotificationRead(notificationId: string): Promise<boolean>;
     markAllNotificationsRead(): Promise<boolean>;
@@ -115,5 +120,30 @@ export declare class StreakApiClient {
     sendRoomInvitation(roomId: string, inviteeId: string): Promise<{
         invitationId: string;
         success: boolean;
+    }>;
+    getInvitationDetails(invitationId: string): Promise<{
+        invitationId: string;
+        roomId: string;
+        roomName: string;
+        inviterName: string;
+        type: string;
+        status: string;
+        trackedHabits: Array<{
+            id: string;
+            name: string;
+            description: string | null;
+        }>;
+    }>;
+    getRoomByInviteCode(inviteCode: string): Promise<{
+        roomId: string;
+        roomName: string;
+        description: string | null;
+        visibility: string;
+        inviteCode: string;
+        trackedHabits: Array<{
+            id: string;
+            name: string;
+            description: string | null;
+        }>;
     }>;
 }

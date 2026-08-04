@@ -395,6 +395,9 @@ export class StreakApiClient {
       inviteCode: r.invite_code,
       memberCount: r.room_members?.[0]?.count || 0,
       activeTodayCount: 0,
+      durationType: r.duration_type || 'PERMANENT',
+      durationDays: r.duration_days,
+      expiresAt: r.expires_at,
     }));
   }
 
@@ -405,11 +408,35 @@ export class StreakApiClient {
     const { data, error } = await this.supabase.rpc('create_room', {
       p_owner_id: user.id,
       p_name: dto.name,
-      p_description: dto.description,
+      p_description: dto.description || null,
       p_visibility: dto.visibility,
+      p_duration_type: dto.durationType || 'PERMANENT',
+      p_duration_days: dto.durationDays || null,
     });
 
     if (error) throw new Error(error.message);
+
+    // Save initial tracked habits for room
+    if (dto.trackedHabits && dto.trackedHabits.length > 0) {
+      for (const th of dto.trackedHabits) {
+        await this.supabase.from('room_habits').insert({
+          room_id: data.roomId,
+          name: th.name,
+          description: th.description || null,
+        });
+      }
+    }
+
+    // Send invitations to pre-invited members
+    if (dto.invitedUserIds && dto.invitedUserIds.length > 0) {
+      for (const inviteeId of dto.invitedUserIds) {
+        try {
+          await this.sendRoomInvitation(data.roomId, inviteeId);
+        } catch (invErr) {
+          console.warn('Failed to send room invitation during creation:', invErr);
+        }
+      }
+    }
 
     return {
       id: data.roomId,
@@ -420,6 +447,9 @@ export class StreakApiClient {
       inviteCode: data.inviteCode,
       memberCount: 1,
       activeTodayCount: 0,
+      durationType: data.durationType,
+      durationDays: data.durationDays,
+      expiresAt: data.expiresAt,
     };
   }
 
@@ -509,9 +539,22 @@ export class StreakApiClient {
       inviteCode: room.invite_code,
       memberCount: members.length,
       activeTodayCount: 0,
+      durationType: room.duration_type || 'PERMANENT',
+      durationDays: room.duration_days,
+      expiresAt: room.expires_at,
       roomHabits,
       members,
     };
+  }
+
+  async extendRoomDuration(roomId: string, additionalDays: number): Promise<any> {
+    const { data, error } = await this.supabase.rpc('extend_room_duration', {
+      p_room_id: roomId,
+      p_additional_days: additionalDays,
+    });
+
+    if (error) throw new Error(error.message);
+    return data;
   }
 
   async createRoomHabit(roomId: string, name: string, description?: string): Promise<any> {
@@ -831,7 +874,7 @@ export class StreakApiClient {
     };
   }
 
-  // Update Habit Icon
+  // Update Habit Icon or details
   async updateHabitIcon(habitId: string, iconName: string): Promise<any> {
     const { data, error } = await this.supabase
       .from('habits')
@@ -842,6 +885,34 @@ export class StreakApiClient {
 
     if (error) throw new Error(error.message);
     return data;
+  }
+
+  async updateHabit(habitId: string, dto: any): Promise<any> {
+    const { data, error } = await this.supabase
+      .from('habits')
+      .update({
+        name: dto.name,
+        description: dto.description,
+        icon: dto.icon,
+        reminder_time: dto.reminderTime,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', habitId)
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  async deleteRoom(roomId: string): Promise<{ success: boolean }> {
+    const { error } = await this.supabase
+      .from('rooms')
+      .update({ archived_at: new Date().toISOString() })
+      .eq('id', roomId);
+
+    if (error) throw new Error(error.message);
+    return { success: true };
   }
 
   // In-App Notifications & Room Invitations
@@ -926,6 +997,41 @@ export class StreakApiClient {
     const { data, error } = await this.supabase.rpc('send_room_invitation', {
       p_room_id: roomId,
       p_invitee_id: inviteeId,
+    });
+
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  // Get invitation details including room ID & tracked habits for habit matching (Option 1)
+  async getInvitationDetails(invitationId: string): Promise<{
+    invitationId: string;
+    roomId: string;
+    roomName: string;
+    inviterName: string;
+    type: string;
+    status: string;
+    trackedHabits: Array<{ id: string; name: string; description: string | null }>;
+  }> {
+    const { data, error } = await this.supabase.rpc('get_invitation_details', {
+      p_invitation_id: invitationId,
+    });
+
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  // Get room info by invite code including tracked habits for pre-join matching
+  async getRoomByInviteCode(inviteCode: string): Promise<{
+    roomId: string;
+    roomName: string;
+    description: string | null;
+    visibility: string;
+    inviteCode: string;
+    trackedHabits: Array<{ id: string; name: string; description: string | null }>;
+  }> {
+    const { data, error } = await this.supabase.rpc('get_room_by_invite_code', {
+      p_invite_code: inviteCode.trim().toUpperCase(),
     });
 
     if (error) throw new Error(error.message);

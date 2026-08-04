@@ -13,6 +13,7 @@ interface RoomState {
   loading: boolean;
   loadingDetails: boolean;
   error: string | null;
+  setOptimisticRoom: (room: any) => void;
   fetchRooms: (apiClient: StreakApiClient) => Promise<void>;
   createRoom: (apiClient: StreakApiClient, dto: CreateRoomDto) => Promise<void>;
   joinRoom: (apiClient: StreakApiClient, dto: JoinRoomDto) => Promise<any>;
@@ -36,6 +37,19 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   loading: false,
   loadingDetails: false,
   error: null,
+
+  setOptimisticRoom: (room: any) => {
+    // Preserves instant UX: populates room name, trackedHabits if available, and resets room-specific feed/members
+    set((state) => ({
+      selectedRoomDetails: {
+        ...room,
+        // Preserve previous detailed fields if already fetched for this room
+        ...(state.selectedRoomDetails?.id === room.id ? state.selectedRoomDetails : {}),
+      },
+      roomActivities: state.selectedRoomDetails?.id === room.id ? state.roomActivities : [],
+      roomMembers: state.selectedRoomDetails?.id === room.id ? state.roomMembers : [],
+    }));
+  },
 
   fetchRooms: async (apiClient) => {
     set({ loading: true, error: null });

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Modal,
   View,
@@ -18,26 +18,59 @@ interface NotificationScreenProps {
   onClose: () => void;
 }
 
+import { HabitMatchGate } from '../rooms/HabitMatchGate';
+import { useHabitStore } from '../../store/habit-store';
+
 export const NotificationScreen: React.FC<NotificationScreenProps> = ({
   visible,
   apiClient,
   onClose,
 }) => {
   const { notifications, loading, fetchNotifications, markAllAsRead, respondToInvitation } = useNotificationStore();
+  const { habits } = useHabitStore();
+
+  const [gateDetails, setGateDetails] = useState<{
+    invitationItem: NotificationItem;
+    roomName: string;
+    trackedHabits: any[];
+  } | null>(null);
 
   const handleAccept = async (item: NotificationItem) => {
     if (!item.referenceId) return;
     try {
-      await respondToInvitation(apiClient, item.referenceId, true);
-      await fetchNotifications(apiClient);
-      if (item.type === 'JOIN_REQUEST') {
-        const userName = item.title.split(' ')[0] || 'User';
-        Alert.alert('Request Approved', `${userName} has joined your room!`);
-      } else {
-        Alert.alert('Accepted', 'You have joined the room!');
+      if (item.type === 'ROOM_INVITATION') {
+        // Fetch invitation details to check room's tracked habits
+        const details = await apiClient.getInvitationDetails(item.referenceId);
+        const tracked = details.trackedHabits || [];
+        const userHabitNames = habits.map((h) => h.name.toLowerCase().trim());
+        const missing = tracked.filter((th: any) => !userHabitNames.includes(th.name.toLowerCase().trim()));
+
+        if (missing.length > 0) {
+          // Present HabitMatchGate modal to let user create missing habits
+          setGateDetails({
+            invitationItem: item,
+            roomName: details.roomName,
+            trackedHabits: tracked,
+          });
+          return;
+        }
       }
+
+      await executeAcceptInvitation(item);
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to accept invitation');
+    }
+  };
+
+  const executeAcceptInvitation = async (item: NotificationItem) => {
+    if (!item.referenceId) return;
+    await respondToInvitation(apiClient, item.referenceId, true);
+    await fetchNotifications(apiClient);
+    if (item.type === 'JOIN_REQUEST') {
+      const userName = item.title.split(' ')[0] || 'User';
+      Alert.alert('Request Approved', `${userName} has joined your room!`);
+    } else {
+      Alert.alert('Accepted', 'You have joined the room!');
     }
   };
 
@@ -196,6 +229,22 @@ export const NotificationScreen: React.FC<NotificationScreenProps> = ({
             </View>
           )}
         </ScrollView>
+
+        {/* Habit Match Gate Modal */}
+        {gateDetails && (
+          <HabitMatchGate
+            visible={!!gateDetails}
+            roomName={gateDetails.roomName}
+            trackedHabits={gateDetails.trackedHabits}
+            userHabits={habits}
+            apiClient={apiClient}
+            onClose={() => setGateDetails(null)}
+            onCompleteJoin={async () => {
+              await executeAcceptInvitation(gateDetails.invitationItem);
+              setGateDetails(null);
+            }}
+          />
+        )}
       </View>
     </Modal>
   );

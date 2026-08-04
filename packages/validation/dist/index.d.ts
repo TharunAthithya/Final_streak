@@ -69,14 +69,26 @@ export declare const CreateRoomSchema: z.ZodObject<{
     name: z.ZodString;
     description: z.ZodOptional<z.ZodString>;
     visibility: z.ZodEnum<["PUBLIC", "PRIVATE"]>;
+    durationType: z.ZodOptional<z.ZodEnum<["7_DAYS", "14_DAYS", "30_DAYS", "60_DAYS", "CUSTOM", "PERMANENT"]>>;
+    durationDays: z.ZodOptional<z.ZodNumber>;
+    trackedHabits: z.ZodOptional<z.ZodArray<z.ZodAny, "many">>;
+    invitedUserIds: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
 }, "strip", z.ZodTypeAny, {
     name: string;
     visibility: "PUBLIC" | "PRIVATE";
     description?: string | undefined;
+    durationType?: "7_DAYS" | "14_DAYS" | "30_DAYS" | "60_DAYS" | "CUSTOM" | "PERMANENT" | undefined;
+    durationDays?: number | undefined;
+    trackedHabits?: any[] | undefined;
+    invitedUserIds?: string[] | undefined;
 }, {
     name: string;
     visibility: "PUBLIC" | "PRIVATE";
     description?: string | undefined;
+    durationType?: "7_DAYS" | "14_DAYS" | "30_DAYS" | "60_DAYS" | "CUSTOM" | "PERMANENT" | undefined;
+    durationDays?: number | undefined;
+    trackedHabits?: any[] | undefined;
+    invitedUserIds?: string[] | undefined;
 }>;
 export type CreateRoomDto = z.infer<typeof CreateRoomSchema>;
 export declare const JoinRoomSchema: z.ZodObject<{

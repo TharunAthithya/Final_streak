@@ -52,10 +52,11 @@ export default function TodayScreen() {
     percentageDone,
   } = useHomeHero();
 
-  const { isCompletedForDate, getStoryForDate, completeStoryForDate } = useDailyStoryStore();
+  const { isCompletedForDate, hasSeenSplashForDate, getStoryForDate, completeStoryForDate } = useDailyStoryStore();
   const [showDailyStoryModal, setShowDailyStoryModal] = useState(false);
   const todayStr = toLocalDateString(new Date());
   const isStoryCompletedToday = isCompletedForDate(todayStr);
+  const hasSeenSplashToday = hasSeenSplashForDate(todayStr);
   const todayStory = getStoryForDate(todayStr);
 
   const handleCompleteStory = async () => {
@@ -72,6 +73,11 @@ export default function TodayScreen() {
   useEffect(() => {
     fetchHabits(apiClient);
     fetchNotifications(apiClient);
+
+    // Auto-popup daily story on first launch of the day if splash hasn't been completed/seen
+    if (!hasSeenSplashToday && !isStoryCompletedToday) {
+      setShowDailyStoryModal(true);
+    }
   }, []);
 
   // Network listener & AppState listener for offline detection
@@ -367,6 +373,7 @@ export default function TodayScreen() {
       <DailyStoryModal
         visible={showDailyStoryModal}
         story={todayStory}
+        promiseDay={promiseDay}
         isReadonly={isStoryCompletedToday}
         onClose={() => setShowDailyStoryModal(false)}
         onComplete={handleCompleteStory}

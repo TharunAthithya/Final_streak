@@ -99,6 +99,9 @@ export interface RoomResponse {
     inviteCode?: string;
     memberCount: number;
     activeTodayCount: number;
+    durationType?: string;
+    durationDays?: number;
+    expiresAt?: string;
 }
 export interface ActivityResponse {
     id: string;

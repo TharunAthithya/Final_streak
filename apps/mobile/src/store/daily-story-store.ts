@@ -6,9 +6,12 @@ import { toLocalDateString } from '../utils/streak';
 
 interface DailyStoryState {
   completedDates: string[]; // YYYY-MM-DD strings
+  lastSeenSplashDate: string | null;
   isCompletedForDate: (dateStr?: string) => boolean;
+  hasSeenSplashForDate: (dateStr?: string) => boolean;
   getStoryForDate: (dateStr?: string) => DailyStory;
   completeStoryForDate: (dateStr?: string) => Promise<void>;
+  markSplashSeenForDate: (dateStr?: string) => Promise<void>;
   resetAllProgress: () => Promise<void>;
 }
 
@@ -34,10 +37,16 @@ export const useDailyStoryStore = create<DailyStoryState>()(
   persist(
     (set, get) => ({
       completedDates: [],
+      lastSeenSplashDate: null,
 
       isCompletedForDate: (dateStr?: string) => {
         const targetDate = dateStr || toLocalDateString(new Date());
         return get().completedDates.includes(targetDate);
+      },
+
+      hasSeenSplashForDate: (dateStr?: string) => {
+        const targetDate = dateStr || toLocalDateString(new Date());
+        return get().lastSeenSplashDate === targetDate;
       },
 
       getStoryForDate: (dateStr?: string) => {
@@ -56,8 +65,13 @@ export const useDailyStoryStore = create<DailyStoryState>()(
         }
       },
 
+      markSplashSeenForDate: async (dateStr?: string) => {
+        const targetDate = dateStr || toLocalDateString(new Date());
+        set({ lastSeenSplashDate: targetDate });
+      },
+
       resetAllProgress: async () => {
-        set({ completedDates: [] });
+        set({ completedDates: [], lastSeenSplashDate: null });
       },
     }),
     {

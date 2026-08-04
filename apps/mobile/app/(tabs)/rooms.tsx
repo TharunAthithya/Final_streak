@@ -19,6 +19,7 @@ import { InviteMemberModal } from '../../src/components/rooms/InviteMemberModal'
 import { CreateRoomModal } from '../../src/components/rooms/CreateRoomModal';
 import { RoomDetailsHub } from '../../src/components/rooms/RoomDetailsHub';
 import { ReactionKind } from '../../src/components/rooms/ReactionPill';
+import { HabitMatchGate } from '../../src/components/rooms/HabitMatchGate';
 import { toLocalDateString } from '../../src/utils/streak';
 
 export default function RoomsScreen() {
@@ -33,6 +34,7 @@ export default function RoomsScreen() {
     roomMembers,
     loading,
     loadingDetails,
+    setOptimisticRoom,
     fetchRooms,
     joinRoom,
     leaveRoom,
@@ -110,19 +112,46 @@ export default function RoomsScreen() {
     }
   }, [selectedRoomId]);
 
+  // Gate modal state for pre-join habit verification
+  const [gateInfo, setGateInfo] = useState<{
+    roomName: string;
+    trackedHabits: any[];
+    inviteCode: string;
+  } | null>(null);
+
   const handleJoinRoom = async () => {
     if (!inviteCode.trim()) return;
+    const cleanCode = inviteCode.trim().toUpperCase();
     try {
-      const res = await joinRoom(apiClient, { inviteCode: inviteCode.trim().toUpperCase() });
-      setInviteCode('');
-      setShowJoin(false);
-      if (res?.requestSent) {
-        Alert.alert('Request Sent!', `Your request to join ${res.roomName || 'this room'} has been sent to the room owner for approval.`);
-      } else {
-        Alert.alert('Success!', 'You have joined the room!');
+      // Look up room info and tracked habits
+      const roomInfo = await apiClient.getRoomByInviteCode(cleanCode);
+      const tracked = roomInfo.trackedHabits || [];
+      const userHabitNames = habits.map((h) => h.name.toLowerCase().trim());
+      const missing = tracked.filter((th: any) => !userHabitNames.includes(th.name.toLowerCase().trim()));
+
+      if (missing.length > 0) {
+        setGateInfo({
+          roomName: roomInfo.roomName,
+          trackedHabits: tracked,
+          inviteCode: cleanCode,
+        });
+        return;
       }
+
+      await executeJoinRoom(cleanCode);
     } catch (e: any) {
       Alert.alert('Error', e.message);
+    }
+  };
+
+  const executeJoinRoom = async (codeToUse: string) => {
+    const res = await joinRoom(apiClient, { inviteCode: codeToUse });
+    setInviteCode('');
+    setShowJoin(false);
+    if (res?.requestSent) {
+      Alert.alert('Request Sent!', `Your request to join ${res.roomName || 'this room'} has been sent to the room owner for approval.`);
+    } else {
+      Alert.alert('Success!', 'You have joined the room!');
     }
   };
 
@@ -331,7 +360,10 @@ export default function RoomsScreen() {
           rooms.map((room) => (
             <TouchableOpacity
               key={room.id}
-              onPress={() => setSelectedRoomId(room.id)}
+              onPress={() => {
+                setOptimisticRoom(room);
+                setSelectedRoomId(room.id);
+              }}
               className="bg-[#181513] border border-[#2B2521] p-5 rounded-2xl mb-4 flex-row items-center justify-between"
             >
               <View className="flex-row items-center flex-1 pr-4">
@@ -370,6 +402,22 @@ export default function RoomsScreen() {
 
         <View className="h-16" />
       </ScrollView>
+
+      {/* Pre-Join Habit Match Gate Modal */}
+      {gateInfo && (
+        <HabitMatchGate
+          visible={!!gateInfo}
+          roomName={gateInfo.roomName}
+          trackedHabits={gateInfo.trackedHabits}
+          userHabits={habits}
+          apiClient={apiClient}
+          onClose={() => setGateInfo(null)}
+          onCompleteJoin={async () => {
+            await executeJoinRoom(gateInfo.inviteCode);
+            setGateInfo(null);
+          }}
+        />
+      )}
     </View>
   );
 }

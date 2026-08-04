@@ -36,6 +36,10 @@ export const CreateRoomSchema = z.object({
   name: z.string().min(3, 'Room name must be at least 3 characters').max(50),
   description: z.string().max(200).optional(),
   visibility: z.enum(['PUBLIC', 'PRIVATE']),
+  durationType: z.enum(['7_DAYS', '14_DAYS', '30_DAYS', '60_DAYS', 'CUSTOM', 'PERMANENT']).optional(),
+  durationDays: z.number().int().min(1).max(365).optional(),
+  trackedHabits: z.array(z.any()).optional(),
+  invitedUserIds: z.array(z.string()).optional(),
 });
 
 export type CreateRoomDto = z.infer<typeof CreateRoomSchema>;

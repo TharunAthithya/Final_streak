@@ -48,24 +48,28 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
   // Step 3: Room details
   const [roomName, setRoomName] = useState('');
   const [goalDescription, setGoalDescription] = useState('');
-  const [durationDays, setDurationDays] = useState(30);
+  const [durationType, setDurationType] = useState<'7_DAYS' | '14_DAYS' | '30_DAYS' | '60_DAYS' | 'CUSTOM' | 'PERMANENT'>('30_DAYS');
+  const [durationDays, setDurationDays] = useState<number | undefined>(30);
+  const [customDaysInput, setCustomDaysInput] = useState('45');
   const [creating, setCreating] = useState(false);
 
   // Reset state when modal opens
   useEffect(() => {
     if (visible) {
       setStep(1);
-      // Pre-select creator habits by default or default starter habits
+      // Pre-select creator habits by default if available
       const initialNames = userHabits.length > 0
         ? userHabits.map((h) => h.name)
-        : ['Workout', 'Reading', 'Meditation'];
+        : [];
       setSelectedHabitNames(initialNames);
       setUsernameSearch('');
       setSearchResults([]);
       setInvitedMembers([]);
       setRoomName('');
       setGoalDescription('');
+      setDurationType('30_DAYS');
       setDurationDays(30);
+      setCustomDaysInput('45');
     }
   }, [visible, userHabits]);
 
@@ -116,15 +120,46 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
     setInvitedMembers((prev) => prev.filter((m) => m.id !== userId));
   };
 
+  const handleSelectDurationOption = (type: '7_DAYS' | '14_DAYS' | '30_DAYS' | '60_DAYS' | 'CUSTOM' | 'PERMANENT', days?: number) => {
+    setDurationType(type);
+    if (type === 'PERMANENT') {
+      setDurationDays(undefined);
+    } else if (type === 'CUSTOM') {
+      const parsed = parseInt(customDaysInput, 10);
+      setDurationDays(isNaN(parsed) ? 45 : parsed);
+    } else {
+      setDurationDays(days);
+    }
+  };
+
   const handleCreateRoom = async () => {
+    if (selectedHabitNames.length === 0) {
+      Alert.alert('Habits Required', 'You must select at least one personal habit for this room.');
+      return;
+    }
+
     if (!roomName.trim()) {
       Alert.alert('Room Name Required', 'Please enter a name for your room.');
       return;
     }
 
+    let finalDays: number | undefined = undefined;
+    if (durationType !== 'PERMANENT') {
+      if (durationType === 'CUSTOM') {
+        const parsed = parseInt(customDaysInput, 10);
+        if (isNaN(parsed) || parsed < 1 || parsed > 365) {
+          Alert.alert('Invalid Duration', 'Custom duration must be between 1 and 365 days.');
+          return;
+        }
+        finalDays = parsed;
+      } else {
+        finalDays = durationDays;
+      }
+    }
+
     setCreating(true);
     try {
-      let trackedHabitsPayload = userHabits
+      const trackedHabitsPayload = userHabits
         .filter((h) => selectedHabitNames.includes(h.name))
         .map((h) => ({
           name: h.name,
@@ -133,20 +168,12 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
           scheduleType: h.scheduleType,
         }));
 
-      if (trackedHabitsPayload.length === 0 && selectedHabitNames.length > 0) {
-        trackedHabitsPayload = selectedHabitNames.map((name) => ({
-          name,
-          description: `Daily ${name.toLowerCase()} challenge`,
-          icon: 'target',
-          scheduleType: ScheduleType.DAILY,
-        }));
-      }
-
       const newRoom = await apiClient.createRoom({
         name: roomName.trim(),
         description: goalDescription.trim() || undefined,
         visibility: 'PRIVATE',
-        durationDays,
+        durationType,
+        durationDays: finalDays,
         trackedHabits: trackedHabitsPayload,
         invitedUserIds: invitedMembers.map((m) => m.id),
       });
@@ -369,27 +396,60 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
               <Text className="text-xs font-bold text-[#65605A] uppercase tracking-wider mb-2">
                 Challenge Duration
               </Text>
-              <View className="flex-row gap-2 mb-6">
-                {[7, 14, 30, 60, 90].map((d) => (
-                  <TouchableOpacity
-                    key={d}
-                    onPress={() => setDurationDays(d)}
-                    className={`flex-1 py-2.5 rounded-xl border items-center ${
-                      durationDays === d
-                        ? 'bg-[#E8C08A] border-[#E8C08A]'
-                        : 'bg-[#181513] border-[#2B2521]'
-                    }`}
-                  >
-                    <Text
-                      className={`text-xs font-bold ${
-                        durationDays === d ? 'text-[#241C14]' : 'text-[#F5F2EC]'
+              <View className="flex-row flex-wrap gap-2 mb-4">
+                {[
+                  { label: '7 Days', type: '7_DAYS', days: 7 },
+                  { label: '14 Days', type: '14_DAYS', days: 14 },
+                  { label: '30 Days', type: '30_DAYS', days: 30 },
+                  { label: '60 Days', type: '60_DAYS', days: 60 },
+                  { label: 'Custom', type: 'CUSTOM', days: undefined },
+                  { label: 'Permanent ∞', type: 'PERMANENT', days: undefined },
+                ].map((item) => {
+                  const isSelected = durationType === item.type;
+                  return (
+                    <TouchableOpacity
+                      key={item.type}
+                      onPress={() => handleSelectDurationOption(item.type as any, item.days)}
+                      className={`px-3.5 py-2.5 rounded-xl border items-center flex-grow ${
+                        isSelected
+                          ? 'bg-[#E8C08A] border-[#E8C08A]'
+                          : 'bg-[#181513] border-[#2B2521]'
                       }`}
                     >
-                      {d} Days
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <Text
+                        className={`text-xs font-bold ${
+                          isSelected ? 'text-[#241C14]' : 'text-[#F5F2EC]'
+                        }`}
+                      >
+                        {item.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
+
+              {/* Custom Days Input */}
+              {durationType === 'CUSTOM' && (
+                <View className="mb-5">
+                  <Text className="text-xs font-bold text-[#65605A] uppercase tracking-wider mb-1.5">
+                    Custom Duration (Days 1–365)
+                  </Text>
+                  <TextInput
+                    value={customDaysInput}
+                    onChangeText={(val) => {
+                      setCustomDaysInput(val);
+                      const parsed = parseInt(val, 10);
+                      if (!isNaN(parsed) && parsed > 0) {
+                        setDurationDays(parsed);
+                      }
+                    }}
+                    keyboardType="number-pad"
+                    placeholder="Enter number of days (e.g. 45)"
+                    placeholderTextColor="#65605A"
+                    className="bg-[#181513] border border-[#2B2521] rounded-2xl px-4 py-3 text-sm text-[#F5F2EC]"
+                  />
+                </View>
+              )}
 
               {/* Review Summary Card */}
               <View className="bg-[#181513] border border-[#2B2521] rounded-2xl p-4 mb-6">
@@ -403,7 +463,7 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
                   Invited Members: {invitedMembers.length > 0 ? invitedMembers.map((m) => `@${m.username}`).join(', ') : 'None (Use room code later)'}
                 </Text>
                 <Text className="text-xs text-[#9C958C]">
-                  Duration: {durationDays} Days
+                  Duration: {durationType === 'PERMANENT' ? 'Permanent (No Expiry)' : `${durationDays || 30} Days`}
                 </Text>
               </View>
             </View>
