@@ -381,9 +381,11 @@ export class StreakApiClient {
                 });
             }
         }
-        // Send invitations to pre-invited members
+        // Send invitations to pre-invited members (excluding room owner)
         if (dto.invitedUserIds && dto.invitedUserIds.length > 0) {
             for (const inviteeId of dto.invitedUserIds) {
+                if (inviteeId === user.id)
+                    continue;
                 try {
                     await this.sendRoomInvitation(data.roomId, inviteeId);
                 }
@@ -871,11 +873,15 @@ export class StreakApiClient {
         if (!query || query.trim().length < 2)
             return [];
         const cleanQuery = query.replace('@', '').trim().toLowerCase();
-        const { data, error } = await this.supabase
+        const { data: { user } } = await this.supabase.auth.getUser();
+        let queryBuilder = this.supabase
             .from('profiles')
             .select('id, display_name, username, avatar_url')
-            .ilike('username', `${cleanQuery}%`)
-            .limit(10);
+            .ilike('username', `${cleanQuery}%`);
+        if (user) {
+            queryBuilder = queryBuilder.neq('id', user.id);
+        }
+        const { data, error } = await queryBuilder.limit(10);
         if (error) {
             console.warn('User search error:', error.message);
             return [];

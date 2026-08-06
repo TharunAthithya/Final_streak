@@ -83,10 +83,27 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   respondToInvitation: async (apiClient, invitationId, accept) => {
     try {
       await apiClient.respondToInvitation(invitationId, accept);
-      // Remove or update the notification corresponding to this invitation
-      const updated = get().notifications.filter((n) => n.referenceId !== invitationId);
-      const unread = updated.filter((n) => !n.isRead).length;
-      set({ notifications: updated, unreadCount: unread });
+      if (accept) {
+        // Keep in notification center: mark as read & convert to non-actionable type
+        const updated = get().notifications.map((n) => {
+          if (n.referenceId === invitationId) {
+            return {
+              ...n,
+              isRead: true,
+              type: 'ROOM_JOINED',
+              referenceId: null,
+            };
+          }
+          return n;
+        });
+        const unread = updated.filter((n) => !n.isRead).length;
+        set({ notifications: updated, unreadCount: unread });
+      } else {
+        // Rejected: remove notification so it vanishes from list
+        const updated = get().notifications.filter((n) => n.referenceId !== invitationId);
+        const unread = updated.filter((n) => !n.isRead).length;
+        set({ notifications: updated, unreadCount: unread });
+      }
     } catch (e: any) {
       throw e;
     }
