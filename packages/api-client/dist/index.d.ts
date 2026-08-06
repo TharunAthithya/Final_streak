@@ -50,7 +50,11 @@ export declare class StreakApiClient {
         requestSent?: boolean;
         roomName?: string;
     }>;
+    alignRoomHabitsForUser(roomId: string): Promise<void>;
     leaveRoom(roomId: string): Promise<{
+        success: boolean;
+    }>;
+    deleteRoom(roomId: string): Promise<{
         success: boolean;
     }>;
     getRoomDetails(roomId: string): Promise<RoomResponse & {
@@ -102,6 +106,7 @@ export declare class StreakApiClient {
     getReflectionForDate(localDate: string): Promise<ReflectionResponse | null>;
     submitReflection(dto: CreateReflectionDto): Promise<ReflectionResponse>;
     updateHabitIcon(habitId: string, iconName: string): Promise<any>;
+    updateHabit(habitId: string, dto: Partial<CreateHabitDto>): Promise<any>;
     getNotifications(): Promise<any[]>;
     markNotificationRead(notificationId: string): Promise<boolean>;
     markAllNotificationsRead(): Promise<boolean>;

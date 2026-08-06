@@ -56,6 +56,7 @@ export interface HabitResponse {
     icon?: string;
     status: HabitStatus;
     scheduleType: ScheduleType;
+    daysOfWeek?: number[];
     targetPerWeek?: number;
     timezone: string;
     startDate: string;
@@ -97,8 +98,18 @@ export interface RoomResponse {
     imagePath?: string;
     visibility: RoomVisibility;
     inviteCode?: string;
+    durationDays?: number;
+    trackedHabits?: Array<{
+        id?: string;
+        name: string;
+        description?: string;
+        icon?: string;
+        scheduleType?: string;
+        daysOfWeek?: number[];
+    }>;
     memberCount: number;
     activeTodayCount: number;
+    createdAt?: string;
 }
 export interface ActivityResponse {
     id: string;

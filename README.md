@@ -85,3 +85,15 @@ The database utilizes PostgreSQL **Row Level Security (RLS)** to enforce privacy
 - `undo_complete_habit`: Safely reverses habit completion and rolls back statistics.
 - `get_leaderboard`: Computes weekly and monthly leaderboard rankings within a room.
 - `join_room` / `leave_room` / `create_room`: Manages active members and ownership bounds.
+
+
+
+
+
+
+
+pnpm dev
+
+
+cd apps/mobile
+pnpm start -c

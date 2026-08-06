@@ -871,8 +871,8 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 CREATE OR REPLACE FUNCTION public.create_room(
   p_owner_id UUID,
   p_name TEXT,
-  p_description TEXT,
-  p_visibility room_visibility
+  p_description TEXT DEFAULT NULL,
+  p_visibility room_visibility DEFAULT 'PRIVATE'::room_visibility
 )
 RETURNS JSON AS $$
 DECLARE

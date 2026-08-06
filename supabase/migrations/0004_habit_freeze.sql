@@ -604,3 +604,14 @@ BEGIN
   RETURN v_result;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- Grant permissions for RPC execution
+GRANT EXECUTE ON FUNCTION public.recalculate_habit_stats(UUID, DATE) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.complete_habit(UUID, UUID, DATE, TEXT, TEXT) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.undo_complete_habit(UUID, UUID, UUID) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.freeze_habit(UUID, UUID, DATE, TEXT, TEXT) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.undo_freeze_habit(UUID, UUID, UUID) TO authenticated, service_role;
+
+-- Signal PostgREST to reload schema cache
+NOTIFY pgrst, 'reload schema';
+

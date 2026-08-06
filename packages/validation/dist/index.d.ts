@@ -69,14 +69,53 @@ export declare const CreateRoomSchema: z.ZodObject<{
     name: z.ZodString;
     description: z.ZodOptional<z.ZodString>;
     visibility: z.ZodEnum<["PUBLIC", "PRIVATE"]>;
+    durationDays: z.ZodOptional<z.ZodNumber>;
+    trackedHabits: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        name: z.ZodString;
+        description: z.ZodOptional<z.ZodString>;
+        icon: z.ZodOptional<z.ZodString>;
+        scheduleType: z.ZodOptional<z.ZodString>;
+        daysOfWeek: z.ZodOptional<z.ZodArray<z.ZodNumber, "many">>;
+    }, "strip", z.ZodTypeAny, {
+        name: string;
+        description?: string | undefined;
+        icon?: string | undefined;
+        scheduleType?: string | undefined;
+        daysOfWeek?: number[] | undefined;
+    }, {
+        name: string;
+        description?: string | undefined;
+        icon?: string | undefined;
+        scheduleType?: string | undefined;
+        daysOfWeek?: number[] | undefined;
+    }>, "many">>;
+    invitedUserIds: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
 }, "strip", z.ZodTypeAny, {
     name: string;
     visibility: "PUBLIC" | "PRIVATE";
     description?: string | undefined;
+    durationDays?: number | undefined;
+    trackedHabits?: {
+        name: string;
+        description?: string | undefined;
+        icon?: string | undefined;
+        scheduleType?: string | undefined;
+        daysOfWeek?: number[] | undefined;
+    }[] | undefined;
+    invitedUserIds?: string[] | undefined;
 }, {
     name: string;
     visibility: "PUBLIC" | "PRIVATE";
     description?: string | undefined;
+    durationDays?: number | undefined;
+    trackedHabits?: {
+        name: string;
+        description?: string | undefined;
+        icon?: string | undefined;
+        scheduleType?: string | undefined;
+        daysOfWeek?: number[] | undefined;
+    }[] | undefined;
+    invitedUserIds?: string[] | undefined;
 }>;
 export type CreateRoomDto = z.infer<typeof CreateRoomSchema>;
 export declare const JoinRoomSchema: z.ZodObject<{

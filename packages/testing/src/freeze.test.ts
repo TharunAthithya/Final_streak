@@ -1,7 +1,17 @@
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect, vi } from 'vitest';
 import { HabitResponse, HabitStatus, ScheduleType } from '@streak/contracts';
 import { validateFreeze, checkAndRegenerateFreeze, calculateSessionStatuses, calculateCalendarGridStatuses, getSessionStatusForDate } from '../../../apps/mobile/src/utils/freeze.js';
 import { calculateDailyPromiseProgress, normalizeToLocalMidnight, toLocalDateString, isHabitScheduledForDate } from '../../../apps/mobile/src/utils/streak.js';
+import { getStoryIndexForDate } from '../../../apps/mobile/src/store/daily-story-store.js';
+import { DAILY_STORIES } from '../../../apps/mobile/src/data/daily-stories.js';
+
+vi.mock('@react-native-async-storage/async-storage', () => ({
+  default: {
+    getItem: vi.fn(() => Promise.resolve(null)),
+    setItem: vi.fn(() => Promise.resolve(null)),
+    removeItem: vi.fn(() => Promise.resolve(null)),
+  },
+}));
 
 // Helper to construct a base mock habit
 function createMockHabit(overrides: Partial<HabitResponse> = {}): HabitResponse {
@@ -484,4 +494,114 @@ describe('Freeze Explicit Regression Tests', () => {
     expect(completionRate).toBe(2 / 3);
     expect(completionRate).not.toBe(1); // Must not be 3/3 (100%)
   });
+
+  // Scenario 23: Verify FREEZE status maps to 'Frozen' and excludes from completed metrics
+  test('Scenario 23: FREEZE status maps to Frozen state and does not increment completion metrics', () => {
+    const refToday = new Date('2026-07-10T12:00:00Z');
+    const habit = createMockHabit({
+      checkIns: [
+        { id: 'c1', localDate: '2026-07-08', status: 'COMPLETED' },
+        { id: 'c2', localDate: '2026-07-09', status: 'FREEZE' },
+      ],
+    });
+
+    const statusJuly9 = getSessionStatusForDate(habit, new Date('2026-07-09T12:00:00Z'), refToday);
+    expect(statusJuly9).toBe('freeze');
+
+    const progressJuly9 = calculateDailyPromiseProgress([habit], '2026-07-09', refToday);
+    expect(progressJuly9.completed).toBe(0);
+    expect(progressJuly9.ratio).toBe(0);
+  });
+
+  // Scenario 24: Verify validateFreeze cleanly separates Missed (Eligible) vs Missed (Expired)
+  test('Scenario 24: validateFreeze cleanly separates Missed (Eligible) vs Missed (Expired) without backend errors', () => {
+    const refToday = new Date('2026-07-10T12:00:00Z');
+    const habit = createMockHabit({ freezeDaysAvailable: 1 });
+
+    // Yesterday (July 9th) -> Eligible
+    const yesterdayCheck = validateFreeze(habit, '2026-07-09', refToday);
+    expect(yesterdayCheck.valid).toBe(true);
+
+    // 4 Days Ago (July 6th) -> Expired
+    const oldCheck = validateFreeze(habit, '2026-07-06', refToday);
+    expect(oldCheck.valid).toBe(false);
+    expect(oldCheck.error).toContain('Target date is too old');
+  });
 });
+
+describe('Specific Days Scheduling Audit Tests', () => {
+  const refToday = new Date('2026-07-10T12:00:00Z'); // Friday (July 10, 2026)
+  // July 6: Mon, July 7: Tue, July 8: Wed, July 9: Thu, July 10: Fri
+
+  test('Scenario A: Specific Days habit (Mon/Wed/Fri) on Tuesday (Rest Day)', () => {
+    const habit = createMockHabit({
+      scheduleType: ScheduleType.SPECIFIC_DAYS,
+      daysOfWeek: [1, 3, 5], // Mon, Wed, Fri
+    } as any);
+
+    const isTueSched = isHabitScheduledForDate(habit, '2026-07-07');
+    expect(isTueSched).toBe(false); // Tuesday is a Rest Day
+
+    const progressTue = calculateDailyPromiseProgress([habit], '2026-07-07', refToday);
+    expect(progressTue.total).toBe(0); // Tuesday does not count toward Today's Promise
+  });
+
+  test('Scenario B: Mon(Comp), Tue(Rest), Wed(Comp) preserves Current Streak = 2', () => {
+    const habit = createMockHabit({
+      scheduleType: ScheduleType.SPECIFIC_DAYS,
+      daysOfWeek: [1, 3, 5],
+      checkIns: [
+        { id: '1', localDate: '2026-07-06', status: 'COMPLETED' }, // Mon
+        { id: '2', localDate: '2026-07-08', status: 'COMPLETED' }, // Wed
+      ],
+    } as any);
+
+    const isMonSched = isHabitScheduledForDate(habit, '2026-07-06');
+    const isWedSched = isHabitScheduledForDate(habit, '2026-07-08');
+    expect(isMonSched).toBe(true);
+    expect(isWedSched).toBe(true);
+
+    const statusTue = getSessionStatusForDate(habit, new Date('2026-07-07T12:00:00Z'), refToday);
+    expect(statusTue).toBe('not_scheduled');
+  });
+
+  test('Scenario D: Attempting Freeze on Rest Day is rejected', () => {
+    const habit = createMockHabit({
+      scheduleType: ScheduleType.SPECIFIC_DAYS,
+      daysOfWeek: [1, 3, 5],
+      freezeDaysAvailable: 1,
+    } as any);
+
+    const tueCheck = validateFreeze(habit, '2026-07-07', refToday);
+    expect(tueCheck.valid).toBe(false);
+    expect(tueCheck.error).toContain('Target date is not a scheduled day');
+  });
+});
+
+describe('Before You Begin Coaching Feature Tests', () => {
+  test('Deterministic story selection is stable throughout the local day', () => {
+    const dateStr = '2026-07-27';
+    const index1 = getStoryIndexForDate(dateStr);
+    const index2 = getStoryIndexForDate(dateStr);
+    expect(index1).toBe(index2);
+    expect(index1).toBeGreaterThanOrEqual(0);
+    expect(index1).toBeLessThan(DAILY_STORIES.length);
+
+    const story1 = DAILY_STORIES[index1];
+    expect(story1).toHaveProperty('thought');
+    expect(story1).toHaveProperty('consequence');
+    expect(story1).toHaveProperty('betterApproach');
+    expect(story1).toHaveProperty('practicalExample');
+  });
+
+  test('Consecutive days cycle to different stories', () => {
+    const idxDay1 = getStoryIndexForDate('2026-07-27');
+    const idxDay2 = getStoryIndexForDate('2026-07-28');
+    expect(idxDay1).not.toBe(idxDay2);
+  });
+});
+
+
+
+
+

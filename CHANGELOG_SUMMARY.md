@@ -71,3 +71,22 @@ This update delivers a complete overhaul of the **Final Streak** mobile app, inc
 | `apps/mobile/src/components/rooms/RoomInfoSheet.tsx` | Room info sheet bottom panel |
 | `apps/mobile/src/components/ui/NotificationScreen.tsx` | Notifications screen with actionable invitation cards |
 | `project_audit_report.md` | Workspace audit log of all incremental changes |
+
+---
+
+## Incremental Updates (2026-07-23)
+
+### 8. Redesigned Habit Creation Bottom Sheet
+- **Premium Bottom Sheet Layout**: Rebuilt the habit creation form into a dedicated bottom sheet modal (`CreateHabitBottomSheet.tsx`) with drag handles, close buttons, and smooth slide animation on backdrop overlay (`rgba(0,0,0,0.6)`).
+- **Reactive Live Habit Preview**: Displayed a real-time habit card preview that updates dynamically as the user types the name, selects schedule days, or picks an icon.
+- **Grouped Icon Picker**: Replaced the simple list picker with a spacious grid of 34 outline icons categorized into Mind, Fitness, Wellness, Productivity, Home, Creativity, and Finance.
+- **Philosophy Context**: Added a subtle card reinforcing that unscheduled days never break the habit streak.
+- **Scroll & Gesture Refinement**: Separated the backdrop touch listener from the sheet container, ensuring nested ScrollViews receive clean, native touch/drag events without being blocked.
+
+### 9. Sync-Aware Calculations & UI
+- **Offline & Sync Recovery**: Introduced `getSyncAwareHabits` utility to merge local offline check-in/undo/freeze RPC queues into the API-fetched habits array, permanently resolving flickering and metric calculation drifts in "Today's Promise" card on app start or date refresh.
+
+### 10. Habit History Grid Refinement
+- **Today's Double Circle Marker**: Replaced the solid circle representing today's day in the 2-week calendar grid with a double circle (outer border and inner dot) dynamically located via local date match.
+- **Future Inactive States**: Rendered future days as dark-grey inactive dots (`#1C1816` fill, `#2B2521` border) to signify that they are not accessible.
+
