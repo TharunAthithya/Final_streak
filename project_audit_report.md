@@ -260,48 +260,7 @@ The database schema is defined in [0001_schema.sql](file:///d:/Projects/streak/s
 | 2026-07-22 19:05 (local) | Fix Private Room Invite Code RLS Bypass & Instant Habit Icon Feedback | Created migration 0009_room_invite_rpc.sql with SECURITY DEFINER join_room_by_code RPC to allow non-members to look up private rooms by invite code and trigger owner join requests without RLS errors. Added instant habit icon display state update and dark-gold confirmation toast in HabitDetailModal. Migrated RoomInfoSheet to expo-clipboard. | [0009_room_invite_rpc.sql](file:///Users/yogeswar/personal/Final_streak/supabase/migrations/0009_room_invite_rpc.sql), [index.ts (api-client)](file:///Users/yogeswar/personal/Final_streak/packages/api-client/src/index.ts), [HabitDetailModal.tsx](file:///Users/yogeswar/personal/Final_streak/apps/mobile/src/components/habits/HabitDetailModal.tsx), [today.tsx](file:///Users/yogeswar/personal/Final_streak/apps/mobile/app/(tabs)/today.tsx), [RoomInfoSheet.tsx](file:///Users/yogeswar/personal/Final_streak/apps/mobile/src/components/rooms/RoomInfoSheet.tsx) |
 | 2026-07-22 19:15 (local) | Fix Notification Wording, Informational Notices & Modal Static Flag Error | Created migration 0010_invitation_wording_fix.sql. Updated respond_to_invitation to send informational ROOM_JOINED notices ("You are now part of [Room]") to approved requesters without action buttons. Tailored owner approval alert wording to "[User Name] has joined your room!". Fixed React static flag error across all Modals by replacing presentationStyle with transparent and explicit flex: 1 styles. | [0010_invitation_wording_fix.sql](file:///Users/yogeswar/personal/Final_streak/supabase/migrations/0010_invitation_wording_fix.sql), [NotificationScreen.tsx](file:///Users/yogeswar/personal/Final_streak/apps/mobile/src/components/ui/NotificationScreen.tsx), [InviteMemberModal.tsx](file:///Users/yogeswar/personal/Final_streak/apps/mobile/src/components/rooms/InviteMemberModal.tsx), [today.tsx](file:///Users/yogeswar/personal/Final_streak/apps/mobile/app/(tabs)/today.tsx) |
 | 2026-07-22 19:30 (local) | Fix HabitDetailModal React Hook Order & Notification Vanish Flow | Fixed the root cause of 'Internal React error: Expected static flag was missing' by moving the early return (if (!visible || !habit) return null) in HabitDetailModal.tsx AFTER all useState/useEffect declarations to comply with React's Rules of Hooks. Updated NotificationScreen to immediately re-fetch notifications on Accept/Decline so actioned cards vanish instantly. | [HabitDetailModal.tsx](file:///Users/yogeswar/personal/Final_streak/apps/mobile/src/components/habits/HabitDetailModal.tsx), [NotificationScreen.tsx](file:///Users/yogeswar/personal/Final_streak/apps/mobile/src/components/ui/NotificationScreen.tsx) |
-| 2026-07-23 01:50 (local) | Auth / Session | Explicitly call setSession after successful signIn and signUp in auth-store.ts to ensure token headers are attached before retrieving the user profile. | [auth-store.ts](file:///d:/Projects/streak/apps/mobile/src/store/auth-store.ts) |
-| 2026-07-23 02:25 (local) | UI / UX Redesign | Redesigned the Habit Creation experience into a premium bottom sheet modal with real-time live preview, friendly validation, structured 34-icon picker, segmented scheduling selector, and philosophy context card. | [CreateHabitBottomSheet.tsx](file:///d:/Projects/streak/apps/mobile/src/components/habits/CreateHabitBottomSheet.tsx), [today.tsx](file:///d:/Projects/streak/apps/mobile/app/(tabs)/today.tsx), [habit-icons.ts](file:///d:/Projects/streak/apps/mobile/src/utils/habit-icons.ts), [Icon.tsx](file:///d:/Projects/streak/apps/mobile/src/components/ui/Icon.tsx) |
-| 2026-07-23 02:38 (local) | Sync / Offline | Introduced getSyncAwareHabits helper to merge local pending check-ins/undoes/freezes from the offline sync queue with habits fetched from API, fixing staleness and calculation drifts in Today's Promise. | [streak.ts](file:///d:/Projects/streak/apps/mobile/src/utils/streak.ts), [useHomeHero.ts](file:///d:/Projects/streak/apps/mobile/src/hooks/useHomeHero.ts), [today.tsx](file:///d:/Projects/streak/apps/mobile/app/(tabs)/today.tsx) |
-| 2026-07-23 02:44 (local) | UI / UX Refinement | Styled today's circle in the HabitCard history grid as a double circle (outer border + inner dot) to visually distinguish today's streak marker. | [RecentSessionsStrip.tsx](file:///d:/Projects/streak/apps/mobile/src/components/habits/RecentSessionsStrip.tsx) |
-| 2026-07-23 03:04 (local) | UI / UX Refinement | Fixed today's double circle to match dynamically by local date comparison (instead of hardcoded index 13) and rendered future days with a dark-grey inactive dot style. | [RecentSessionsStrip.tsx](file:///d:/Projects/streak/apps/mobile/src/components/habits/RecentSessionsStrip.tsx) |
-| 2026-07-24 01:03 (local) | Bug Fix / Date Alignment | Aligned today's date calculations to the user's local timezone date instead of UTC ISO strings across Today's Promise, progress ring, today habits filtering, getSyncAwareHabits, and api-client. | [streak.ts](file:///d:/Projects/streak/apps/mobile/src/utils/streak.ts), [today.tsx](file:///d:/Projects/streak/apps/mobile/app/(tabs)/today.tsx), [index.ts (api-client)](file:///d:/Projects/streak/packages/api-client/src/index.ts) |
-| 2026-07-24 02:16 (local) | UI / UX Feature Redesign | Implemented Streak Habit Details Redesign with HabitDetailsSheet bottom sheet shell, shared HabitContributionGraph component with Monday-start grid math, SelectedDayInfo inline panel, nested FreezeSheet with local preview streak math, and pre-populated Edit Habit support in CreateHabitBottomSheet. | [HabitDetailsSheet.tsx](file:///d:/Projects/streak/apps/mobile/src/components/habits/HabitDetailsSheet.tsx), [HabitContributionGraph.tsx](file:///d:/Projects/streak/apps/mobile/src/components/habits/HabitContributionGraph.tsx), [ContributionDay.tsx](file:///d:/Projects/streak/apps/mobile/src/components/habits/ContributionDay.tsx), [SelectedDayInfo.tsx](file:///d:/Projects/streak/apps/mobile/src/components/habits/SelectedDayInfo.tsx), [HabitStatsCard.tsx](file:///d:/Projects/streak/apps/mobile/src/components/habits/HabitStatsCard.tsx), [FreezeSheet.tsx](file:///d:/Projects/streak/apps/mobile/src/components/habits/FreezeSheet.tsx), [FreezeConfirmationCard.tsx](file:///d:/Projects/streak/apps/mobile/src/components/habits/FreezeConfirmationCard.tsx), [CreateHabitBottomSheet.tsx](file:///d:/Projects/streak/apps/mobile/src/components/habits/CreateHabitBottomSheet.tsx), [today.tsx](file:///d:/Projects/streak/apps/mobile/app/(tabs)/today.tsx), [index.ts (api-client)](file:///d:/Projects/streak/packages/api-client/src/index.ts), [habit-store.ts](file:///d:/Projects/streak/apps/mobile/src/store/habit-store.ts) |
-| 2026-08-02 17:28 (local) | Bug Fix / Room Quick Completion | Fixed `Habit Not Found` alert error when completing a room habit. `handleQuickCompleteHabit` in `rooms.tsx` now automatically creates a matching personal habit (`createHabit`) if the user doesn't have one yet, then checks in immediately and updates real-time room progress and member status. | [rooms.tsx](file:///d:/Projects/streak/apps/mobile/app/(tabs)/rooms.tsx) |
-| 2026-08-06 14:07 (local) | UI Refinement | Removed the unused "Discover more rooms to stay accountable with others" dashed card from the Accountability Rooms tab screen. | [rooms.tsx](file:///d:/Projects/streak/apps/mobile/app/(tabs)/rooms.tsx) |
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+| 2026-08-02 22:38 (local) | Feature Update | Implemented 3 key refinements: 1) Direct join by code migration 0013_direct_join_by_code.sql bypassing join requests; 2) One-time daily splash slider with automatic popup on first app launch of the day and direct cards view on subsequent visits; 3) Instant room detail loading via setOptimisticRoom in room-store. | [0013_direct_join_by_code.sql](file:///Users/yogeswar/personal/Final_streak/supabase/migrations/0013_direct_join_by_code.sql), [daily-story-store.ts](file:///Users/yogeswar/personal/Final_streak/apps/mobile/src/store/daily-story-store.ts), [DailyStoryModal.tsx](file:///Users/yogeswar/personal/Final_streak/apps/mobile/src/components/coaching/DailyStoryModal.tsx), [today.tsx](file:///Users/yogeswar/personal/Final_streak/apps/mobile/app/(tabs)/today.tsx), [room-store.ts](file:///Users/yogeswar/personal/Final_streak/apps/mobile/src/store/room-store.ts), [rooms.tsx](file:///Users/yogeswar/personal/Final_streak/apps/mobile/app/(tabs)/rooms.tsx) |
 
 
 

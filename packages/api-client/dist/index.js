@@ -1,10 +1,4 @@
 import { createClient } from '@supabase/supabase-js';
-function toLocalDateString(date) {
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-}
 export class StreakApiClient {
     supabase;
     constructor(supabaseUrl, supabaseAnonKey, options) {
@@ -88,10 +82,10 @@ export class StreakApiClient {
     }
     // Habits Simple CRUD (direct table queries)
     async getHabits(includeArchived = false) {
-        const todayStr = toLocalDateString(new Date());
+        const todayStr = new Date().toISOString().split('T')[0];
         const query = this.supabase
             .from('habits')
-            .select('*, habit_stats(*), check_ins(id, local_date, status), habit_schedule_days(day_of_week)');
+            .select('*, habit_stats(*), check_ins(id, local_date)');
         if (!includeArchived) {
             query.eq('status', 'ACTIVE');
         }
@@ -99,7 +93,7 @@ export class StreakApiClient {
         if (error)
             throw new Error(error.message);
         return (data || []).map((h) => {
-            const todayCheckIn = h.check_ins?.find((c) => c.local_date === todayStr && c.status === 'COMPLETED');
+            const todayCheckIn = h.check_ins?.find((c) => c.local_date === todayStr);
             const completedToday = !!todayCheckIn;
             const todayCheckInId = todayCheckIn?.id || null;
             return {
@@ -110,7 +104,6 @@ export class StreakApiClient {
                 icon: h.icon,
                 status: h.status,
                 scheduleType: h.schedule_type,
-                daysOfWeek: h.habit_schedule_days?.map((d) => d.day_of_week) || [],
                 targetPerWeek: h.target_per_week,
                 timezone: h.timezone,
                 startDate: h.start_date,
@@ -125,7 +118,7 @@ export class StreakApiClient {
                     totalCompletions: h.habit_stats.total_completions,
                     completionRate: Number(h.habit_stats.completion_rate),
                 } : undefined,
-                checkIns: h.check_ins?.map((c) => ({ id: c.id, localDate: c.local_date, status: c.status || 'COMPLETED' })) || [],
+                checkIns: h.check_ins?.map((c) => ({ id: c.id, localDate: c.local_date, status: 'COMPLETED' })) || [],
                 freezeDaysAvailable: h.freeze_days_available,
                 lastFreezeReset: h.last_freeze_reset,
             };
@@ -173,7 +166,6 @@ export class StreakApiClient {
             icon: habit.icon,
             status: habit.status,
             scheduleType: habit.schedule_type,
-            daysOfWeek: dto.daysOfWeek || [],
             targetPerWeek: habit.target_per_week,
             timezone: habit.timezone,
             startDate: habit.start_date,
@@ -344,34 +336,26 @@ export class StreakApiClient {
             return [];
         const { data, error } = await this.supabase
             .from('rooms')
-            .select('*, room_members(count), room_habits(*)')
+            .select('*, room_members(count)')
             .in('id', roomIds)
             .is('archived_at', null)
             .order('created_at', { ascending: false });
         if (error)
             throw new Error(error.message);
-        return (data || []).map((r) => {
-            const roomHabits = (r.room_habits || []).filter((h) => !h.archived_at).map((h) => ({
-                id: h.id,
-                name: h.name,
-                description: h.description,
-                icon: h.icon || 'target',
-            }));
-            return {
-                id: r.id,
-                ownerId: r.owner_id,
-                name: r.name,
-                description: r.description,
-                imagePath: r.image_url,
-                visibility: r.visibility,
-                inviteCode: r.invite_code,
-                durationDays: r.duration_days || 30,
-                memberCount: r.room_members?.[0]?.count || 0,
-                activeTodayCount: 0,
-                roomHabits,
-                trackedHabits: roomHabits,
-            };
-        });
+        return (data || []).map((r) => ({
+            id: r.id,
+            ownerId: r.owner_id,
+            name: r.name,
+            description: r.description,
+            imagePath: r.image_url,
+            visibility: r.visibility,
+            inviteCode: r.invite_code,
+            memberCount: r.room_members?.[0]?.count || 0,
+            activeTodayCount: 0,
+            durationType: r.duration_type || 'PERMANENT',
+            durationDays: r.duration_days,
+            expiresAt: r.expires_at,
+        }));
     }
     async createRoom(dto) {
         const { data: { user } } = await this.supabase.auth.getUser();
@@ -381,44 +365,45 @@ export class StreakApiClient {
             p_owner_id: user.id,
             p_name: dto.name,
             p_description: dto.description || null,
-            p_visibility: dto.visibility || 'PRIVATE',
+            p_visibility: dto.visibility,
+            p_duration_type: dto.durationType || 'PERMANENT',
+            p_duration_days: dto.durationDays || null,
         });
         if (error)
             throw new Error(error.message);
-        const roomId = data.roomId;
-        // Insert tracked habits into room_habits if provided
+        // Save initial tracked habits for room
         if (dto.trackedHabits && dto.trackedHabits.length > 0) {
-            for (const habit of dto.trackedHabits) {
+            for (const th of dto.trackedHabits) {
                 await this.supabase.from('room_habits').insert({
-                    room_id: roomId,
-                    name: habit.name,
-                    description: habit.description || null,
+                    room_id: data.roomId,
+                    name: th.name,
+                    description: th.description || null,
                 });
             }
         }
-        // Send direct invitations if invitedUserIds provided
+        // Send invitations to pre-invited members
         if (dto.invitedUserIds && dto.invitedUserIds.length > 0) {
             for (const inviteeId of dto.invitedUserIds) {
                 try {
-                    await this.sendRoomInvitation(roomId, inviteeId);
+                    await this.sendRoomInvitation(data.roomId, inviteeId);
                 }
-                catch (e) {
-                    console.warn('Failed to send invitation to user:', inviteeId, e);
+                catch (invErr) {
+                    console.warn('Failed to send room invitation during creation:', invErr);
                 }
             }
         }
         return {
-            id: roomId,
+            id: data.roomId,
             ownerId: user.id,
             name: data.name,
             description: dto.description,
             visibility: dto.visibility,
             inviteCode: data.inviteCode,
-            durationDays: dto.durationDays || 30,
-            trackedHabits: dto.trackedHabits,
             memberCount: 1,
             activeTodayCount: 0,
-            createdAt: new Date().toISOString(),
+            durationType: data.durationType,
+            durationDays: data.durationDays,
+            expiresAt: data.expiresAt,
         };
     }
     async joinRoom(dto) {
@@ -431,13 +416,8 @@ export class StreakApiClient {
         });
         if (error)
             throw new Error(error.message);
-        const roomId = data.roomId;
-        // Automatic Habit Alignment: create missing habits for joining user
-        if (roomId && data.joined) {
-            await this.alignRoomHabitsForUser(roomId);
-        }
         return {
-            id: roomId || '',
+            id: data.roomId || '',
             ownerId: '',
             name: data.roomName || '',
             description: undefined,
@@ -448,39 +428,6 @@ export class StreakApiClient {
             requestSent: !!data.requestSent,
             roomName: data.roomName,
         };
-    }
-    // Helper: Automatically creates missing room habits for joining user
-    async alignRoomHabitsForUser(roomId) {
-        try {
-            const { data: { user } } = await this.supabase.auth.getUser();
-            if (!user)
-                return;
-            const { data: roomHabits } = await this.supabase
-                .from('room_habits')
-                .select('*')
-                .eq('room_id', roomId)
-                .is('archived_at', null);
-            if (!roomHabits || roomHabits.length === 0)
-                return;
-            const userHabits = await this.getHabits();
-            const todayStr = toLocalDateString(new Date());
-            for (const rh of roomHabits) {
-                const alreadyHas = userHabits.some((h) => h.name.toLowerCase() === rh.name.toLowerCase());
-                if (!alreadyHas) {
-                    await this.createHabit({
-                        name: rh.name,
-                        description: rh.description || undefined,
-                        icon: 'target',
-                        scheduleType: 'DAILY',
-                        timezone: 'UTC',
-                        startDate: todayStr,
-                    });
-                }
-            }
-        }
-        catch (err) {
-            console.warn('Failed to align room habits for user:', err);
-        }
     }
     async leaveRoom(roomId) {
         const { data: { user } } = await this.supabase.auth.getUser();
@@ -493,30 +440,6 @@ export class StreakApiClient {
         if (error)
             throw new Error(error.message);
         return { success: data };
-    }
-    async deleteRoom(roomId) {
-        const { data: { user } } = await this.supabase.auth.getUser();
-        if (!user)
-            throw new Error('Not authenticated');
-        try {
-            const { data, error } = await this.supabase.rpc('delete_room', {
-                p_room_id: roomId,
-                p_owner_id: user.id,
-            });
-            if (!error)
-                return { success: data };
-        }
-        catch (e) {
-            console.warn('delete_room RPC fallback to update:', e);
-        }
-        const { error: updateErr } = await this.supabase
-            .from('rooms')
-            .update({ archived_at: new Date().toISOString() })
-            .eq('id', roomId)
-            .eq('owner_id', user.id);
-        if (updateErr)
-            throw new Error(updateErr.message);
-        return { success: true };
     }
     async getRoomDetails(roomId) {
         // 1. Fetch Room info
@@ -544,87 +467,11 @@ export class StreakApiClient {
                 created_at: m.profiles?.created_at,
             },
         }));
-        let roomHabits = (room.room_habits || []).filter((h) => !h.archived_at).map((h) => ({
+        const roomHabits = (room.room_habits || []).filter((h) => !h.archived_at).map((h) => ({
             id: h.id,
             name: h.name,
             description: h.description,
-            icon: h.icon || 'target',
         }));
-        // Fallback: If a room has 0 tracked habits in DB (legacy room or missing insert), auto-populate habits
-        if (roomHabits.length === 0) {
-            const { data: ownerHabits } = await this.supabase
-                .from('habits')
-                .select('name, description, icon')
-                .eq('user_id', room.owner_id)
-                .is('archived_at', null)
-                .limit(5);
-            if (ownerHabits && ownerHabits.length > 0) {
-                for (const oh of ownerHabits) {
-                    try {
-                        const { data: inserted } = await this.supabase
-                            .from('room_habits')
-                            .insert({
-                            room_id: roomId,
-                            name: oh.name,
-                            description: oh.description || null,
-                        })
-                            .select()
-                            .single();
-                        if (inserted) {
-                            roomHabits.push({
-                                id: inserted.id,
-                                name: inserted.name,
-                                description: inserted.description,
-                                icon: oh.icon || 'target',
-                            });
-                        }
-                    }
-                    catch (e) {
-                        console.warn('Failed auto-populating owner room habit:', e);
-                        roomHabits.push({
-                            id: `fallback-${oh.name}`,
-                            name: oh.name,
-                            description: oh.description || null,
-                            icon: oh.icon || 'target',
-                        });
-                    }
-                }
-            }
-            // If owner had no personal habits either, provide default starter shared habits
-            if (roomHabits.length === 0) {
-                const defaultHabitNames = ['Workout', 'Reading', 'Meditation'];
-                for (const defaultName of defaultHabitNames) {
-                    try {
-                        const { data: inserted } = await this.supabase
-                            .from('room_habits')
-                            .insert({
-                            room_id: roomId,
-                            name: defaultName,
-                            description: `Daily ${defaultName.toLowerCase()} challenge`,
-                        })
-                            .select()
-                            .single();
-                        if (inserted) {
-                            roomHabits.push({
-                                id: inserted.id,
-                                name: inserted.name,
-                                description: inserted.description,
-                                icon: 'target',
-                            });
-                        }
-                    }
-                    catch (e) {
-                        console.warn('Failed auto-populating default room habit:', e);
-                        roomHabits.push({
-                            id: `default-${defaultName}`,
-                            name: defaultName,
-                            description: `Daily ${defaultName.toLowerCase()} challenge`,
-                            icon: 'target',
-                        });
-                    }
-                }
-            }
-        }
         return {
             id: room.id,
             ownerId: room.owner_id,
@@ -633,13 +480,23 @@ export class StreakApiClient {
             imagePath: room.image_url,
             visibility: room.visibility,
             inviteCode: room.invite_code,
-            durationDays: room.duration_days || 30,
             memberCount: members.length,
             activeTodayCount: 0,
+            durationType: room.duration_type || 'PERMANENT',
+            durationDays: room.duration_days,
+            expiresAt: room.expires_at,
             roomHabits,
-            trackedHabits: roomHabits,
             members,
         };
+    }
+    async extendRoomDuration(roomId, additionalDays) {
+        const { data, error } = await this.supabase.rpc('extend_room_duration', {
+            p_room_id: roomId,
+            p_additional_days: additionalDays,
+        });
+        if (error)
+            throw new Error(error.message);
+        return data;
     }
     async createRoomHabit(roomId, name, description) {
         const { data, error } = await this.supabase
@@ -925,7 +782,7 @@ export class StreakApiClient {
             updatedAt: data.updated_at,
         };
     }
-    // Update Habit Icon
+    // Update Habit Icon or details
     async updateHabitIcon(habitId, iconName) {
         const { data, error } = await this.supabase
             .from('habits')
@@ -937,47 +794,31 @@ export class StreakApiClient {
             throw new Error(error.message);
         return data;
     }
-    // Update Habit (name, description, icon, scheduleType, daysOfWeek)
     async updateHabit(habitId, dto) {
-        const updatePayload = { updated_at: new Date().toISOString() };
-        if (dto.name !== undefined)
-            updatePayload.name = dto.name;
-        if (dto.description !== undefined)
-            updatePayload.description = dto.description;
-        if (dto.icon !== undefined)
-            updatePayload.icon = dto.icon;
-        if (dto.scheduleType !== undefined)
-            updatePayload.schedule_type = dto.scheduleType;
-        const { error } = await this.supabase
+        const { data, error } = await this.supabase
             .from('habits')
-            .update(updatePayload)
-            .eq('id', habitId);
+            .update({
+            name: dto.name,
+            description: dto.description,
+            icon: dto.icon,
+            reminder_time: dto.reminderTime,
+            updated_at: new Date().toISOString(),
+        })
+            .eq('id', habitId)
+            .select()
+            .single();
         if (error)
             throw new Error(error.message);
-        // Sync habit_schedule_days table
-        if (dto.scheduleType === 'SPECIFIC_DAYS' && dto.daysOfWeek) {
-            await this.supabase
-                .from('habit_schedule_days')
-                .delete()
-                .eq('habit_id', habitId);
-            const scheduleDays = dto.daysOfWeek.map((day) => ({
-                habit_id: habitId,
-                day_of_week: day,
-            }));
-            const { error: daysError } = await this.supabase
-                .from('habit_schedule_days')
-                .insert(scheduleDays);
-            if (daysError)
-                throw new Error(daysError.message);
-        }
-        else if (dto.scheduleType === 'DAILY') {
-            await this.supabase
-                .from('habit_schedule_days')
-                .delete()
-                .eq('habit_id', habitId);
-        }
-        const habits = await this.getHabits();
-        return habits.find((h) => h.id === habitId);
+        return data;
+    }
+    async deleteRoom(roomId) {
+        const { error } = await this.supabase
+            .from('rooms')
+            .update({ archived_at: new Date().toISOString() })
+            .eq('id', roomId);
+        if (error)
+            throw new Error(error.message);
+        return { success: true };
     }
     // In-App Notifications & Room Invitations
     async getNotifications() {
@@ -1029,17 +870,11 @@ export class StreakApiClient {
     async searchUsersByUsername(query) {
         if (!query || query.trim().length < 2)
             return [];
-        const raw = query.trim().toLowerCase();
-        const cleanQuery = raw.replace(/^@/, '');
-        const emailPrefix = cleanQuery.includes('@') ? cleanQuery.split('@')[0] : cleanQuery;
-        const searchTerms = Array.from(new Set([cleanQuery, emailPrefix])).filter((t) => t.length >= 2);
-        const conditions = searchTerms
-            .flatMap((term) => [`username.ilike.%${term}%`, `display_name.ilike.%${term}%`])
-            .join(',');
+        const cleanQuery = query.replace('@', '').trim().toLowerCase();
         const { data, error } = await this.supabase
             .from('profiles')
             .select('id, display_name, username, avatar_url')
-            .or(conditions)
+            .ilike('username', `${cleanQuery}%`)
             .limit(10);
         if (error) {
             console.warn('User search error:', error.message);
@@ -1057,6 +892,24 @@ export class StreakApiClient {
         const { data, error } = await this.supabase.rpc('send_room_invitation', {
             p_room_id: roomId,
             p_invitee_id: inviteeId,
+        });
+        if (error)
+            throw new Error(error.message);
+        return data;
+    }
+    // Get invitation details including room ID & tracked habits for habit matching (Option 1)
+    async getInvitationDetails(invitationId) {
+        const { data, error } = await this.supabase.rpc('get_invitation_details', {
+            p_invitation_id: invitationId,
+        });
+        if (error)
+            throw new Error(error.message);
+        return data;
+    }
+    // Get room info by invite code including tracked habits for pre-join matching
+    async getRoomByInviteCode(inviteCode) {
+        const { data, error } = await this.supabase.rpc('get_room_by_invite_code', {
+            p_invite_code: inviteCode.trim().toUpperCase(),
         });
         if (error)
             throw new Error(error.message);

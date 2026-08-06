@@ -52,6 +52,16 @@ export const RoomInfoSheet: React.FC<RoomInfoSheetProps> = ({
 }) => {
   const [selectedMember, setSelectedMember] = useState<RoomMemberDetail | null>(null);
 
+  const handleExtend = async (additionalDays: number) => {
+    try {
+      await apiClient.extendRoomDuration(roomId, additionalDays);
+      Alert.alert('Duration Extended', `Room extended by ${additionalDays} days!`);
+      onClose();
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to extend room duration');
+    }
+  };
+
   if (!roomDetails) return null;
 
   const roomName = roomDetails.name || 'Room Information';
@@ -193,21 +203,22 @@ export const RoomInfoSheet: React.FC<RoomInfoSheetProps> = ({
               <View className="space-y-2.5">
                 <View className="flex-row justify-between items-center py-1">
                   <Text className="text-xs text-[#9C958C]">Challenge Length</Text>
-                  <Text className="text-xs font-bold text-[#F5F2EC]">{durationDays} Days</Text>
+                  <Text className="text-xs font-bold text-[#F5F2EC]">
+                    {roomDetails.durationType === 'PERMANENT' ? 'Permanent ∞' : `${durationDays} Days`}
+                  </Text>
                 </View>
+
+                {roomDetails.expiresAt && (
+                  <View className="flex-row justify-between items-center py-1 border-t border-[#2B2521]">
+                    <Text className="text-xs text-[#9C958C]">Expires On</Text>
+                    <Text className="text-xs font-bold text-[#E8C08A]">
+                      {new Date(roomDetails.expiresAt).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </Text>
+                  </View>
+                )}
 
                 <View className="flex-row justify-between items-center py-1 border-t border-[#2B2521]">
                   <Text className="text-xs text-[#9C958C]">Created Date</Text>
-                  <Text className="text-xs font-bold text-[#F5F2EC]">{formattedCreatedDate}</Text>
-                </View>
-
-                <View className="flex-row justify-between items-center py-1 border-t border-[#2B2521]">
-                  <Text className="text-xs text-[#9C958C]">Challenge Start</Text>
-                  <Text className="text-xs font-bold text-[#F5F2EC]">{formattedStartDate}</Text>
-                </View>
-
-                <View className="flex-row justify-between items-center py-1 border-t border-[#2B2521]">
-                  <Text className="text-xs text-[#9C958C]">Challenge End</Text>
                   <Text className="text-xs font-bold text-[#E8C08A]">{formattedEndDate}</Text>
                 </View>
               </View>

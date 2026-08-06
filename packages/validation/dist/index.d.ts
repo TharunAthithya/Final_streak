@@ -69,52 +69,25 @@ export declare const CreateRoomSchema: z.ZodObject<{
     name: z.ZodString;
     description: z.ZodOptional<z.ZodString>;
     visibility: z.ZodEnum<["PUBLIC", "PRIVATE"]>;
+    durationType: z.ZodOptional<z.ZodEnum<["7_DAYS", "14_DAYS", "30_DAYS", "60_DAYS", "CUSTOM", "PERMANENT"]>>;
     durationDays: z.ZodOptional<z.ZodNumber>;
-    trackedHabits: z.ZodOptional<z.ZodArray<z.ZodObject<{
-        name: z.ZodString;
-        description: z.ZodOptional<z.ZodString>;
-        icon: z.ZodOptional<z.ZodString>;
-        scheduleType: z.ZodOptional<z.ZodString>;
-        daysOfWeek: z.ZodOptional<z.ZodArray<z.ZodNumber, "many">>;
-    }, "strip", z.ZodTypeAny, {
-        name: string;
-        description?: string | undefined;
-        icon?: string | undefined;
-        scheduleType?: string | undefined;
-        daysOfWeek?: number[] | undefined;
-    }, {
-        name: string;
-        description?: string | undefined;
-        icon?: string | undefined;
-        scheduleType?: string | undefined;
-        daysOfWeek?: number[] | undefined;
-    }>, "many">>;
+    trackedHabits: z.ZodOptional<z.ZodArray<z.ZodAny, "many">>;
     invitedUserIds: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
 }, "strip", z.ZodTypeAny, {
     name: string;
     visibility: "PUBLIC" | "PRIVATE";
     description?: string | undefined;
+    durationType?: "7_DAYS" | "14_DAYS" | "30_DAYS" | "60_DAYS" | "CUSTOM" | "PERMANENT" | undefined;
     durationDays?: number | undefined;
-    trackedHabits?: {
-        name: string;
-        description?: string | undefined;
-        icon?: string | undefined;
-        scheduleType?: string | undefined;
-        daysOfWeek?: number[] | undefined;
-    }[] | undefined;
+    trackedHabits?: any[] | undefined;
     invitedUserIds?: string[] | undefined;
 }, {
     name: string;
     visibility: "PUBLIC" | "PRIVATE";
     description?: string | undefined;
+    durationType?: "7_DAYS" | "14_DAYS" | "30_DAYS" | "60_DAYS" | "CUSTOM" | "PERMANENT" | undefined;
     durationDays?: number | undefined;
-    trackedHabits?: {
-        name: string;
-        description?: string | undefined;
-        icon?: string | undefined;
-        scheduleType?: string | undefined;
-        daysOfWeek?: number[] | undefined;
-    }[] | undefined;
+    trackedHabits?: any[] | undefined;
     invitedUserIds?: string[] | undefined;
 }>;
 export type CreateRoomDto = z.infer<typeof CreateRoomSchema>;
