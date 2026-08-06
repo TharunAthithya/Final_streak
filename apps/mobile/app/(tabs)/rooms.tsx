@@ -358,16 +358,6 @@ export default function RoomsScreen() {
           ))
         )}
 
-        {/* Dashed Discover card matching Figma design */}
-        <View className="border border-dashed border-[#453C34] rounded-2xl p-6 items-center my-4 bg-[#17130F]">
-          <View className="w-10 h-10 bg-[#181513] rounded-full items-center justify-center mb-3">
-            <Icon name="feed" size={18} color="#9C958C" />
-          </View>
-          <Text className="text-sm text-[#9C958C] text-center max-w-[220px]">
-            Discover more rooms to stay accountable with others.
-          </Text>
-        </View>
-
         <View className="h-16" />
       </ScrollView>
     </View>
