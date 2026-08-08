@@ -310,7 +310,7 @@ export const RoomDetailsHub: React.FC<RoomDetailsHubProps> = ({
                       {isUserCompleted ? (
                         <View className="flex-row items-center bg-[#8FBF9E]/20 border border-[#8FBF9E]/40 px-2.5 py-1 rounded-full">
                           <Icon name="check" size={12} color="#8FBF9E" className="mr-1" />
-                          <Text className="text-[11px] font-bold text-[#8FBF9E]">✓ Completed</Text>
+                          <Text className="text-[11px] font-bold text-[#8FBF9E]">Completed</Text>
                         </View>
                       ) : (
                         <TouchableOpacity
@@ -334,11 +334,22 @@ export const RoomDetailsHub: React.FC<RoomDetailsHubProps> = ({
                       .filter((m: any) => (m.user?.id || m.profileId) !== currentUserId)
                       .map((m: any, mIdx: number) => {
                         const mName = m.user?.displayName || m.displayName || 'Member';
-                        const isCompletedToday = roomActivities.some(
-                          (act: any) =>
-                            (act.actorUserId === (m.user?.id || m.profileId) || act.actorDisplayName === mName) &&
-                            act.message?.toLowerCase().includes(habit.name.toLowerCase())
-                        );
+                        const memberId = m.user?.id || m.profileId;
+                        const todayIso = new Date().toISOString().split('T')[0];
+                        const targetHabitName = habit.name.toLowerCase().trim();
+
+                        const isCompletedToday = roomActivities.some((act: any) => {
+                          const matchesActor = act.actorUserId === memberId || (act.actorDisplayName && act.actorDisplayName === mName);
+                          if (!matchesActor) return false;
+
+                          const actHabitMeta = act.metadata_json?.habitName?.toLowerCase()?.trim();
+                          const actMsg = act.message?.toLowerCase();
+                          const matchesHabit = actHabitMeta ? actHabitMeta === targetHabitName : actMsg?.includes(targetHabitName);
+                          if (!matchesHabit) return false;
+
+                          const actDate = act.metadata_json?.localDate || (act.createdAt ? new Date(act.createdAt).toISOString().split('T')[0] : null);
+                          return !actDate || actDate === todayIso;
+                        });
 
                         return (
                           <TouchableOpacity
@@ -363,9 +374,9 @@ export const RoomDetailsHub: React.FC<RoomDetailsHubProps> = ({
                             </View>
 
                             {isCompletedToday ? (
-                              <View className="flex-row items-center bg-[#8FBF9E]/10 px-2 py-0.5 rounded-full">
+                              <View className="flex-row items-center bg-[#8FBF9E]/20 border border-[#8FBF9E]/40 px-2.5 py-1 rounded-full">
                                 <Icon name="check" size={12} color="#8FBF9E" className="mr-1" />
-                                <Text className="text-[11px] font-bold text-[#8FBF9E]">✓</Text>
+                                <Text className="text-[11px] font-bold text-[#8FBF9E]">Completed</Text>
                               </View>
                             ) : (
                               <Text className="text-xs text-[#65605A]">○</Text>
@@ -381,7 +392,7 @@ export const RoomDetailsHub: React.FC<RoomDetailsHubProps> = ({
         </View>
 
         {/* CARD 5 — ⚡ ACTIVITY FEED */}
-        <View className="mb-5">
+        <View className="mb-10">
           <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-3">
             ACTIVITY
           </Text>
@@ -399,78 +410,6 @@ export const RoomDetailsHub: React.FC<RoomDetailsHubProps> = ({
           ) : (
             <View className="bg-[#181513] border border-[#2B2521] rounded-2xl overflow-hidden p-2">
               <RoomChatFeed items={feedItems} onToggleReaction={onToggleReaction} />
-            </View>
-          )}
-        </View>
-
-        {/* CARD 6 — 👥 MEMBERS */}
-        <View className="mb-10">
-          <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-3">
-            MEMBERS ({roomMembers.length})
-          </Text>
-
-          {roomMembers.length === 0 ? (
-            <View className="bg-[#181513] border border-[#2B2521] p-6 rounded-2xl items-center">
-              <Icon name="users" size={28} color="#65605A" className="mb-2" />
-              <Text className="text-sm text-[#9C958C]">
-                Invite someone to start keeping promises together.
-              </Text>
-            </View>
-          ) : (
-            <View className="bg-[#181513] border border-[#2B2521] rounded-2xl overflow-hidden">
-              {roomMembers.map((m: any, idx: number) => {
-                const displayName = m.user?.displayName || m.displayName || 'Member';
-                const username = m.user?.username || m.username || 'user';
-                const isYou = (m.user?.id || m.profileId) === currentUserId;
-                const joinedAgo = getJoinedAgoText(m.joinedAt);
-
-                return (
-                  <TouchableOpacity
-                    key={m.id || idx}
-                    onPress={() =>
-                      setSelectedMember({
-                        id: m.id,
-                        userId: m.user?.id || m.profileId,
-                        displayName,
-                        username,
-                        avatarPath: m.user?.avatarPath,
-                        role: m.role,
-                        joinedAt: m.joinedAt,
-                        bio: m.user?.bio,
-                        isYou,
-                      })
-                    }
-                    className={`flex-row items-center p-3.5 ${
-                      idx > 0 ? 'border-t border-[#2B2521]' : ''
-                    }`}
-                  >
-                    <Avatar name={displayName} size={36} />
-                    <View className="flex-1 ml-3">
-                      <View className="flex-row items-center">
-                        <Text className="text-sm font-bold text-[#F5F2EC] mr-2">{displayName}</Text>
-                        {isYou && (
-                          <View className="bg-[#3A2E1F] px-1.5 py-0.5 rounded-full mr-1">
-                            <Text className="text-[9.5px] font-bold text-[#E8C08A]">YOU</Text>
-                          </View>
-                        )}
-                        {m.role === 'OWNER' && (
-                          <View className="bg-[#2B2521] px-1.5 py-0.5 rounded-full">
-                            <Text className="text-[9.5px] font-bold text-[#E8C08A]">OWNER</Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text className="text-xs text-[#65605A]">
-                        @{username} • {joinedAgo}
-                      </Text>
-                    </View>
-
-                    <View className="flex-row items-center">
-                      <View className="w-2 h-2 rounded-full bg-[#8FBF9E] mr-1.5" />
-                      <Text className="text-xs font-semibold text-[#8FBF9E]">Joined</Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
             </View>
           )}
         </View>

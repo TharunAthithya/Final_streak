@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Text,
   View,
@@ -9,6 +9,9 @@ import {
   Alert,
   Modal,
   AppState,
+  Platform,
+  UIManager,
+  LayoutAnimation,
 } from 'react-native';
 import { useAuthStore } from '../../src/store/auth-store';
 import { useSyncStore } from '../../src/store/sync-store';
@@ -40,6 +43,10 @@ export default function TodayScreen() {
   const [isOfflineMode, setIsOfflineMode] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [selectedHabitForDetail, setSelectedHabitForDetail] = useState<any | null>(null);
+
+  // Delayed reordering state for habit completion
+  const [sortedCompletedIds, setSortedCompletedIds] = useState<Set<string>>(new Set());
+  const reorderTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const {
     greeting,
@@ -103,15 +110,49 @@ export default function TodayScreen() {
     };
   }, [pendingQueue]);
 
-  // Filter & sort habits scheduled for today (Uncompleted habits at top, completed move to bottom)
+  // Filter & sort habits scheduled for today with 900ms delayed completion reordering
   const syncAwareHabits = getSyncAwareHabits(habits, pendingQueue);
-  const todayHabits = syncAwareHabits
-    .filter((h) => isHabitScheduledForDate(h, todayStr))
-    .sort((a, b) => {
-      const aDone = (a as any).completedToday ? 1 : 0;
-      const bDone = (b as any).completedToday ? 1 : 0;
-      return aDone - bDone;
+  const scheduledToday = syncAwareHabits.filter((h) => isHabitScheduledForDate(h, todayStr));
+
+  useEffect(() => {
+    scheduledToday.forEach((h) => {
+      const isDone = !!(h as any).completedToday;
+      if (isDone) {
+        if (!sortedCompletedIds.has(h.id) && !reorderTimersRef.current.has(h.id)) {
+          const timer = setTimeout(() => {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setSortedCompletedIds((prev) => {
+              const next = new Set(prev);
+              next.add(h.id);
+              return next;
+            });
+            reorderTimersRef.current.delete(h.id);
+          }, 900);
+          reorderTimersRef.current.set(h.id, timer);
+        }
+      } else {
+        if (reorderTimersRef.current.has(h.id)) {
+          clearTimeout(reorderTimersRef.current.get(h.id)!);
+          reorderTimersRef.current.delete(h.id);
+        }
+        if (sortedCompletedIds.has(h.id)) {
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          setSortedCompletedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(h.id);
+            return next;
+          });
+        }
+      }
     });
+  }, [syncAwareHabits]);
+
+  const todayHabits = [...scheduledToday].sort((a, b) => {
+    const aDoneForSort = sortedCompletedIds.has(a.id) ? 1 : 0;
+    const bDoneForSort = sortedCompletedIds.has(b.id) ? 1 : 0;
+    return aDoneForSort - bDoneForSort;
+  });
+
   const selectedHabit = selectedHabitForDetail
     ? syncAwareHabits.find((h) => h.id === selectedHabitForDetail.id) || selectedHabitForDetail
     : null;

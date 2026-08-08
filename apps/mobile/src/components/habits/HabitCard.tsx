@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, Animated } from 'react-native';
 import { RecentSessionsStrip, SessionStatus } from './RecentSessionsStrip';
 import { CompletionButton } from './CompletionButton';
 import { Icon } from '../ui/Icon';
@@ -38,14 +38,64 @@ export const HabitCard: React.FC<HabitCardProps> = ({
 }) => {
   const [confirmFreezeDate, setConfirmFreezeDate] = React.useState<string | null>(null);
 
-  // Active freezable dates only if user has freeze days available
+  const isCompleted = completionStatus === 'completed';
   const activeFreezableDates = freezeDaysAvailable >= 1 ? freezableDates : [];
-
-  // Resolve icon using priority chain (Manual override / Saved -> Keyword -> Default)
   const resolvedIcon = resolveHabitIcon(name, iconName);
 
+  // Animated values
+  const animScale = useRef(new Animated.Value(isCompleted ? 0.98 : 1)).current;
+  const animOpacity = useRef(new Animated.Value(isCompleted ? 0.82 : 1)).current;
+  const animHighlight = useRef(new Animated.Value(0)).current;
+  const prevStatusRef = useRef(completionStatus);
+
+  useEffect(() => {
+    // Animate scale and opacity on status change
+    Animated.parallel([
+      Animated.timing(animScale, {
+        toValue: isCompleted ? 0.98 : 1,
+        duration: 250,
+        useNativeDriver: false,
+      }),
+      Animated.timing(animOpacity, {
+        toValue: isCompleted ? 0.82 : 1,
+        duration: 250,
+        useNativeDriver: false,
+      }),
+    ]).start();
+
+    // Trigger 180ms highlight flash when completed
+    if (prevStatusRef.current !== 'completed' && completionStatus === 'completed') {
+      Animated.sequence([
+        Animated.timing(animHighlight, {
+          toValue: 1,
+          duration: 40,
+          useNativeDriver: false,
+        }),
+        Animated.timing(animHighlight, {
+          toValue: 0,
+          duration: 180,
+          useNativeDriver: false,
+        }),
+      ]).start();
+    }
+
+    prevStatusRef.current = completionStatus;
+  }, [completionStatus, isCompleted]);
+
+  const borderColor = animHighlight.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['#2B2521', '#E8C08A'],
+  });
+
   return (
-    <View className="bg-[#181513] border border-[#2B2521] rounded-2xl p-4 mb-3 flex-col">
+    <Animated.View
+      style={{
+        transform: [{ scale: animScale }],
+        opacity: animOpacity,
+        borderColor: borderColor,
+      }}
+      className="bg-[#181513] border rounded-2xl p-4 mb-3 flex-col"
+    >
       <View className="flex-row justify-between items-center">
         <TouchableOpacity
           activeOpacity={onCardPress ? 0.7 : 1}
@@ -119,6 +169,6 @@ export const HabitCard: React.FC<HabitCardProps> = ({
           </View>
         </View>
       )}
-    </View>
+    </Animated.View>
   );
 };

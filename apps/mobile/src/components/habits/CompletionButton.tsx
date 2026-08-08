@@ -1,5 +1,6 @@
-import React from 'react';
-import { TouchableOpacity } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { TouchableOpacity, Animated } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { Icon } from '../ui/Icon';
 
 interface CompletionButtonProps {
@@ -13,6 +14,50 @@ export const CompletionButton: React.FC<CompletionButtonProps> = ({
   onPress,
   size = 40,
 }) => {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (status === 'completed') {
+      Animated.sequence([
+        Animated.timing(scale, {
+          toValue: 1.22,
+          duration: 110,
+          useNativeDriver: false,
+        }),
+        Animated.spring(scale, {
+          toValue: 1.0,
+          friction: 4,
+          tension: 180,
+          useNativeDriver: false,
+        }),
+      ]).start();
+    }
+  }, [status]);
+
+  const handlePress = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (e) {
+      // Haptics fallback on unsupported devices
+    }
+
+    Animated.sequence([
+      Animated.timing(scale, {
+        toValue: 1.25,
+        duration: 100,
+        useNativeDriver: false,
+      }),
+      Animated.spring(scale, {
+        toValue: 1.0,
+        friction: 4,
+        tension: 180,
+        useNativeDriver: false,
+      }),
+    ]).start();
+
+    onPress();
+  };
+
   const getStyles = () => {
     switch (status) {
       case 'completed':
@@ -27,14 +72,22 @@ export const CompletionButton: React.FC<CompletionButtonProps> = ({
 
   return (
     <TouchableOpacity
-      onPress={onPress}
+      onPress={handlePress}
       disabled={status === 'disabled'}
-      style={{ width: size, height: size }}
-      className={`rounded-full justify-center items-center ${getStyles()}`}
+      activeOpacity={0.8}
     >
-      {status === 'completed' && (
-        <Icon name="check" size={size * 0.5} color="#241C14" />
-      )}
+      <Animated.View
+        style={{
+          width: size,
+          height: size,
+          transform: [{ scale }],
+        }}
+        className={`rounded-full justify-center items-center ${getStyles()}`}
+      >
+        {status === 'completed' && (
+          <Icon name="check" size={size * 0.5} color="#241C14" />
+        )}
+      </Animated.View>
     </TouchableOpacity>
   );
 };

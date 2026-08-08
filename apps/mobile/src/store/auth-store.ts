@@ -3,6 +3,7 @@ import { StreakApiClient } from '@streak/api-client';
 import * as SecureStore from 'expo-secure-store';
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { env } from '../config/env';
 
 // SecureStore adapter for Supabase session persistence
 const SecureStoreAdapter = {
@@ -46,15 +47,8 @@ interface AuthState {
   resetPassword: (newPassword: string) => Promise<void>;
 }
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Supabase environment variables are missing!');
-}
-
-// Instantiate API Client with Secure Storage configuration
-const client = new StreakApiClient(supabaseUrl, supabaseAnonKey, {
+// Instantiate API Client with Secure Storage configuration using centralized env module
+const client = new StreakApiClient(env.EXPO_PUBLIC_SUPABASE_URL, env.EXPO_PUBLIC_SUPABASE_ANON_KEY, {
   auth: {
     storage: SecureStoreAdapter,
     autoRefreshToken: true,
