@@ -1,4 +1,4 @@
--- Migration 0015: Fix get_invitation_details RPC & update respond_to_invitation notification retention
+-- Migration 0016: Fix get_invitation_details RPC & update respond_to_invitation notification retention
 -- 1. Fixes "query has no destination for result data" error when accepting invitations (added INTO v_inviter)
 -- 2. Updates respond_to_invitation so accepted notifications stay in notification center (marked read, non-actionable)
 --    and rejected notifications vanish completely.

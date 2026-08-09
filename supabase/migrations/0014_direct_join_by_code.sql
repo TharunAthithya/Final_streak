@@ -1,4 +1,4 @@
--- Migration 0013: Update join_room_by_code to allow direct joins for all invite codes (bypassing JOIN_REQUEST)
+-- Migration 0014: Update join_room_by_code to allow direct joins for all invite codes (bypassing JOIN_REQUEST)
 
 CREATE OR REPLACE FUNCTION public.join_room_by_code(
   p_invite_code TEXT

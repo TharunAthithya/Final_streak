@@ -10,6 +10,7 @@
     "android": "cross-env APP_ENV=development expo start --android",
     "android:prod": "cross-env APP_ENV=production expo start --android",
     "ios": "cross-env APP_ENV=development expo start --ios",
+    "web": "cross-env APP_ENV=development expo start --web",
     "build:development": "eas build --platform android --profile development",
     "build:preview": "eas build --platform android --profile preview",
     "build:production": "eas build --platform android --profile production",

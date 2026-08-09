@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "5b140330-45f8-41d8-b4d2-2ec0e055c0b2"
+      }
+    },
+    "android": {
+      "package": "streak.beta"
+    }
+  }
+}

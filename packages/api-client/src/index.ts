@@ -682,6 +682,7 @@ export class StreakApiClient {
         roomId: a.room_id,
         type: a.type,
         message: a.message,
+        metadata_json: a.metadata_json,
         createdAt: a.created_at,
         isOwn: a.actor_profile_id === user.id,
         reactions: reactionsMap,

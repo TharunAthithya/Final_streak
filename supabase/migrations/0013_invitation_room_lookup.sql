@@ -1,4 +1,4 @@
--- Migration 0012: Invitation Details & Room Lookup RPCs for Habit Matching
+-- Migration 0013: Invitation Details & Room Lookup RPCs for Habit Matching
 
 -- RPC 1: get_invitation_details
 -- Fetches invitation metadata along with the room's tracked habits so the invitee can check habit compatibility before accepting.

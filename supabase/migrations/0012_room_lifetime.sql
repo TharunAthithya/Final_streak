@@ -1,4 +1,4 @@
--- Migration 0011: Room Lifetime Duration & Expiration Support (Option C)
+-- Migration 0012: Room Lifetime Duration & Expiration Support (Option C)
 
 -- Add duration columns to public.rooms
 ALTER TABLE public.rooms

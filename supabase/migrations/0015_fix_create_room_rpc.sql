@@ -1,4 +1,4 @@
--- Migration 0014: Fix create_room RPC function signature default parameters
+-- Migration 0015: Fix create_room RPC function signature default parameters
 -- Ensures p_description has DEFAULT NULL to prevent PostgREST signature lookup errors when description is omitted.
 
 CREATE OR REPLACE FUNCTION public.create_room(

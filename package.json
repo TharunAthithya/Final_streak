@@ -3,7 +3,11 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev",
+    "dev": "pnpm --filter @streak/mobile dev",
+    "android": "pnpm --filter @streak/mobile android",
+    "build:development": "pnpm --filter @streak/mobile build:development",
+    "build:preview": "pnpm --filter @streak/mobile build:preview",
+    "build:production": "pnpm --filter @streak/mobile build:production",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test"

@@ -23,7 +23,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     orientation: 'portrait',
     icon: './assets/icon.png',
     userInterfaceStyle: 'light',
-    platforms: ['android', 'ios'],
+    platforms: ['android'],
     ios: {
       supportsTablet: true,
       bundleIdentifier: bundleId,
@@ -35,6 +35,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#F8F9F7',
       },
+    },
+    web: {
+      favicon: './assets/favicon.png',
     },
     plugins: [
       'expo-router',
