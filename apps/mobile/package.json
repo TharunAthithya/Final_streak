@@ -10,7 +10,6 @@
     "android": "cross-env APP_ENV=development expo start --android",
     "android:prod": "cross-env APP_ENV=production expo start --android",
     "ios": "cross-env APP_ENV=development expo start --ios",
-    "web": "cross-env APP_ENV=development expo start --web",
     "build:development": "eas build --platform android --profile development",
     "build:preview": "eas build --platform android --profile preview",
     "build:production": "eas build --platform android --profile production",
@@ -39,6 +38,7 @@
     "expo-status-bar": "~56.0.4",
     "nativewind": "^4.2.6",
     "react": "19.2.3",
+    "react-dom": "19.2.3",
     "react-hook-form": "^7.50.0",
     "react-native": "0.85.3",
     "react-native-css-interop": "^0.2.6",
@@ -46,12 +46,10 @@
     "react-native-reanimated": "^4.3.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-svg": "^15.15.4",
+    "react-native-web": "^0.21.2",
     "react-native-worklets": "^0.8.3",
     "zod": "^3.22.4",
     "zustand": "^4.5.0"
-  },
-  "optionalDependencies": {
-    "react-dom": "19.2.3"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
@@ -63,5 +61,3 @@
     "typescript": "^6.0.3"
   }
 }
-
-

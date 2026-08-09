@@ -10,21 +10,25 @@ export interface EnvConfig {
   IS_PROD: boolean;
 }
 
-const getEnvVar = (key: string, extraKey?: string): string => {
-  // 1. Check process.env (injected by Expo CLI at bundle time for EXPO_PUBLIC_*)
-  if (process.env[key]) {
-    return process.env[key] as string;
-  }
-  // 2. Check Constants.expoConfig?.extra fallback
-  if (extraKey && Constants.expoConfig?.extra?.[extraKey]) {
-    return Constants.expoConfig.extra[extraKey] as string;
-  }
-  return '';
-};
+// Explicit property access allows Metro transform-inline-environment-variables
+// to statically substitute values at build time during Metro bundling.
+const rawAppEnv = (
+  process.env.EXPO_PUBLIC_APP_ENV ||
+  (Constants.expoConfig?.extra?.appEnv as string) ||
+  'development'
+).toLowerCase() as AppEnvironment;
 
-const rawAppEnv = (getEnvVar('EXPO_PUBLIC_APP_ENV', 'appEnv') || 'development').toLowerCase() as AppEnvironment;
-const supabaseUrl = getEnvVar('EXPO_PUBLIC_SUPABASE_URL', 'supabaseUrl').trim();
-const supabaseAnonKey = getEnvVar('EXPO_PUBLIC_SUPABASE_ANON_KEY', 'supabaseAnonKey').trim();
+const supabaseUrl = (
+  process.env.EXPO_PUBLIC_SUPABASE_URL ||
+  (Constants.expoConfig?.extra?.supabaseUrl as string) ||
+  ''
+).trim();
+
+const supabaseAnonKey = (
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+  (Constants.expoConfig?.extra?.supabaseAnonKey as string) ||
+  ''
+).trim();
 
 // Placeholder detection list to catch unconfigured production/development envs
 const PLACEHOLDER_PATTERNS = [
