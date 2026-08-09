@@ -23,7 +23,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     orientation: 'portrait',
     icon: './assets/icon.png',
     userInterfaceStyle: 'light',
-    platforms: ['android'],
+    platforms: ['android', 'ios'],
     ios: {
       supportsTablet: true,
       bundleIdentifier: bundleId,
@@ -57,7 +57,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       eas: {
-        projectId: "ffc79f2a-3b83-4fc3-adc6-df06fe41e544" ,
+        projectId: "ffc79f2a-3b83-4fc3-adc6-df06fe41e544",
       },
     },
   };
