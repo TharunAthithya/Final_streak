@@ -27,6 +27,7 @@
     "@streak/validation": "workspace:*",
     "@supabase/supabase-js": "^2.39.0",
     "@tanstack/react-query": "^5.0.0",
+    "babel-preset-expo": "~56.0.19",
     "expo": "~56.0.19",
     "expo-clipboard": "~56.0.4",
     "expo-constants": "~56.0.23",
