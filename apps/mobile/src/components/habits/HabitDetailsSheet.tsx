@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   TouchableWithoutFeedback,
-  Alert,
 } from 'react-native';
 import { HabitResponse } from '@streak/contracts';
 import { StreakApiClient } from '@streak/api-client';
@@ -18,7 +17,8 @@ import { SelectedDayInfo } from './SelectedDayInfo';
 import { ContributionState } from './ContributionDay';
 import { FreezeSheet } from './FreezeSheet';
 import { CreateHabitBottomSheet } from './CreateHabitBottomSheet';
-import { CompletionButton } from './CompletionButton';
+import { useNotice } from '../ui/Notice';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { validateFreeze, checkAndRegenerateFreeze } from '../../utils/freeze';
 import { isHabitScheduledForDate, normalizeToLocalMidnight, toLocalDateString } from '../../utils/streak';
 
@@ -43,12 +43,14 @@ export const HabitDetailsSheet: React.FC<HabitDetailsSheetProps> = ({
   onFreezeHabit,
   onToggleComplete,
 }) => {
+  const notice = useNotice();
   const [selectedDay, setSelectedDay] = useState<{
     dateStr: string;
     state: ContributionState;
   } | null>(null);
   const [showEditSheet, setShowEditSheet] = useState(false);
   const [showFreezeSheet, setShowFreezeSheet] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [updating, setUpdating] = useState(false);
 
@@ -115,29 +117,18 @@ export const HabitDetailsSheet: React.FC<HabitDetailsSheetProps> = ({
 
   const isFreezeEligible = checkHasEligibleMissedDay();
 
-  const handleDelete = () => {
-    Alert.alert(
-      `Delete ${habit.name}?`,
-      'This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              await onDelete(habit.id);
-              onClose();
-            } catch (e: any) {
-              Alert.alert('Error', e.message || 'Failed to delete habit');
-            } finally {
-              setDeleting(false);
-            }
-          },
-        },
-      ]
-    );
+  const handleConfirmDelete = async () => {
+    setShowDeleteConfirm(false);
+    setDeleting(true);
+    try {
+      await onDelete(habit.id);
+      notice.success('Habit deleted');
+      onClose();
+    } catch (e: any) {
+      notice.error(e.message || 'Failed to delete habit');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleUpdateHabit = async (updatedData: any) => {
@@ -145,8 +136,9 @@ export const HabitDetailsSheet: React.FC<HabitDetailsSheetProps> = ({
     try {
       await onUpdateHabit(habit.id, updatedData);
       setShowEditSheet(false);
+      notice.success('Habit updated successfully!');
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to update habit');
+      notice.error(e.message || 'Failed to update habit');
     } finally {
       setUpdating(false);
     }
@@ -173,7 +165,7 @@ export const HabitDetailsSheet: React.FC<HabitDetailsSheetProps> = ({
 
             {/* Header with Trash & Close */}
             <View className="flex-row justify-between items-center mb-4">
-              <TouchableOpacity onPress={handleDelete} disabled={deleting} className="p-2">
+              <TouchableOpacity onPress={() => setShowDeleteConfirm(true)} disabled={deleting} className="p-2">
                 <Icon name="trash" size={18} color="#E8899A" />
               </TouchableOpacity>
 
@@ -192,16 +184,9 @@ export const HabitDetailsSheet: React.FC<HabitDetailsSheetProps> = ({
                   <Icon name={resolvedIcon} size={28} color="#E8C08A" family="material" />
                 </View>
                 <View className="flex-row items-center justify-center mb-1">
-                  <Text className="text-2xl font-bold text-[#F5F2EC] mr-2" style={{ fontFamily: 'Baloo 2' }}>
+                  <Text className="text-2xl font-bold text-[#F5F2EC]" style={{ fontFamily: 'Baloo 2' }}>
                     {habit.name}
                   </Text>
-                  {onToggleComplete && (
-                    <CompletionButton
-                      status={(habit as any).completedToday ? 'completed' : 'pending'}
-                      onPress={onToggleComplete}
-                      size={26}
-                    />
-                  )}
                 </View>
                 <Text className="text-xs text-[#9C958C]">
                   Created on {formatCreationDate(habit.createdAt)}
@@ -286,6 +271,16 @@ export const HabitDetailsSheet: React.FC<HabitDetailsSheetProps> = ({
           }}
         />
       )}
+
+      <ConfirmDialog
+        visible={showDeleteConfirm}
+        title={`Delete ${habit.name}?`}
+        message="This action cannot be undone."
+        confirmLabel="Delete"
+        destructive
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </>
   );
 };

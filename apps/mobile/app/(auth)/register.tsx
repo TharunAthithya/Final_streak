@@ -4,7 +4,6 @@ import {
   View,
   TextInput,
   TouchableOpacity,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -12,6 +11,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../src/store/auth-store';
 import { Icon } from '../../src/components/ui/Icon';
+import { DotPulse } from '../../src/components/ui/DotPulse';
 
 export default function RegisterScreen() {
   const { signUp, loading, error } = useAuthStore();
@@ -139,7 +139,7 @@ export default function RegisterScreen() {
             className="w-full mt-4 bg-[#C5A880] active:bg-[#B3966E] py-4 rounded-xl items-center justify-center shadow-sm"
           >
             {loading ? (
-              <ActivityIndicator color="#12110E" />
+              <DotPulse color="#12110E" size={6} />
             ) : (
               <Text className="text-[#12110E] font-bold text-base">Sign up</Text>
             )}

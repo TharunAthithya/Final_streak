@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, ScrollView, SafeAreaView, StatusBar, ActivityIndicator } from 'react-native';
+import { View, ScrollView, SafeAreaView, StatusBar } from 'react-native';
+import { SkeletonBox } from './SkeletonBox';
 
 interface ScreenProps {
   children: React.ReactNode;
@@ -23,8 +24,9 @@ export const Screen: React.FC<ScreenProps> = ({
     <Container className="flex-1 bg-background">
       <StatusBar barStyle="dark-content" backgroundColor="#F8F9F7" />
       {loading ? (
-        <View className="flex-1 justify-center items-center">
-          <ActivityIndicator size="large" color="#256D4A" />
+        <View className="flex-1 justify-center items-center px-6">
+          <SkeletonBox width="80%" height={24} borderRadius={8} className="mb-4" />
+          <SkeletonBox width="60%" height={16} borderRadius={6} />
         </View>
       ) : (
         <InnerContainer

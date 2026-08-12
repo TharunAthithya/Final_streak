@@ -108,7 +108,11 @@ export const HabitCard: React.FC<HabitCardProps> = ({
               <Icon name={resolvedIcon} size={20} color="#E8C08A" family="material" />
             </View>
             <View className="flex-1">
-              <Text numberOfLines={1} className="text-base font-bold text-[#F5F2EC] leading-tight">
+              <Text
+                numberOfLines={1}
+                style={isCompleted ? { textDecorationLine: 'line-through' } : undefined}
+                className={`text-base font-bold leading-tight ${isCompleted ? 'text-[#9C958C]' : 'text-[#F5F2EC]'}`}
+              >
                 {name}
               </Text>
               <View className="flex-row items-center mt-[3px] flex-wrap">

@@ -37,7 +37,12 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   error: null,
 
   fetchNotifications: async (apiClient) => {
-    set({ loading: true, error: null });
+    const isFirstLoad = get().notifications.length === 0;
+    if (isFirstLoad) {
+      set({ loading: true, error: null });
+    } else {
+      set({ error: null });
+    }
     try {
       const data = await apiClient.getNotifications();
       const formatted: NotificationItem[] = data.map((item: any) => ({

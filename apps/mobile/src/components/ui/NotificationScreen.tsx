@@ -5,12 +5,15 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { Icon } from './Icon';
 import { useNotificationStore, NotificationItem } from '../../store/notification-store';
 import { StreakApiClient } from '@streak/api-client';
+import { NotificationRowSkeleton } from './skeletons/NotificationRowSkeleton';
+import { useNotice } from './Notice';
+import { useDelayedLoading } from '../../hooks/useDelayedLoading';
+import { HabitMatchGate } from '../rooms/HabitMatchGate';
+import { useHabitStore } from '../../store/habit-store';
 
 interface NotificationScreenProps {
   visible: boolean;
@@ -18,39 +21,39 @@ interface NotificationScreenProps {
   onClose: () => void;
 }
 
-import { HabitMatchGate } from '../rooms/HabitMatchGate';
-import { useHabitStore } from '../../store/habit-store';
-
 export const NotificationScreen: React.FC<NotificationScreenProps> = ({
   visible,
   apiClient,
   onClose,
 }) => {
-  const { notifications, loading, fetchNotifications, markAllAsRead, respondToInvitation } = useNotificationStore();
+  const { notifications, loading, fetchNotifications, respondToInvitation, markAllAsRead } =
+    useNotificationStore();
   const { habits } = useHabitStore();
+  const notice = useNotice();
+  const showSkeleton = useDelayedLoading(loading);
 
-  const [gateDetails, setGateDetails] = useState<{
-    invitationItem: NotificationItem;
+  const [pendingGateRoom, setPendingGateRoom] = useState<{
     roomName: string;
     trackedHabits: any[];
+    item: NotificationItem;
   } | null>(null);
 
   const handleAccept = async (item: NotificationItem) => {
     if (!item.referenceId) return;
+
     try {
-      if (item.type === 'ROOM_INVITATION') {
-        // Fetch invitation details to check room's tracked habits
-        const details = await apiClient.getInvitationDetails(item.referenceId);
+      if ((item as any).type === 'ROOM_INVITATION') {
+        const details = await (apiClient as any).getInvitationDetails(item.referenceId);
         const tracked = details.trackedHabits || [];
-        const userHabitNames = habits.map((h) => h.name.toLowerCase().trim());
-        const missing = tracked.filter((th: any) => !userHabitNames.includes(th.name.toLowerCase().trim()));
+        const missing = tracked.filter(
+          (th: any) => !habits.some((h) => h.name.toLowerCase() === th.name.toLowerCase())
+        );
 
         if (missing.length > 0) {
-          // Present HabitMatchGate modal to let user create missing habits
-          setGateDetails({
-            invitationItem: item,
+          setPendingGateRoom({
             roomName: details.roomName,
             trackedHabits: tracked,
+            item,
           });
           return;
         }
@@ -58,7 +61,7 @@ export const NotificationScreen: React.FC<NotificationScreenProps> = ({
 
       await executeAcceptInvitation(item);
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to accept invitation');
+      notice.error(e.message || 'Failed to accept invitation');
     }
   };
 
@@ -68,9 +71,9 @@ export const NotificationScreen: React.FC<NotificationScreenProps> = ({
     await fetchNotifications(apiClient);
     if (item.type === 'JOIN_REQUEST') {
       const userName = item.title.split(' ')[0] || 'User';
-      Alert.alert('Request Approved', `${userName} has joined your room!`);
+      notice.success(`${userName} has joined your room!`);
     } else {
-      Alert.alert('Accepted', 'You have joined the room!');
+      notice.success('You have joined the room!');
     }
   };
 
@@ -79,7 +82,7 @@ export const NotificationScreen: React.FC<NotificationScreenProps> = ({
       await respondToInvitation(apiClient, invitationId, false);
       await fetchNotifications(apiClient);
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to reject invitation');
+      notice.error(e.message || 'Failed to reject invitation');
     }
   };
 
@@ -93,49 +96,20 @@ export const NotificationScreen: React.FC<NotificationScreenProps> = ({
   );
 
   const renderNotificationItem = (item: NotificationItem) => {
-    const isActionable = (item.type === 'ROOM_INVITATION' || item.type === 'JOIN_REQUEST') && item.referenceId;
-
-    // Resolve icon name and family
-    let iconName = item.iconName || 'bell';
-    let iconFamily: 'feather' | 'material' = 'feather';
-    if (item.type === 'JOIN_REQUEST') {
-      iconName = 'account-plus';
-      iconFamily = 'material';
-    } else if (item.type === 'ROOM_INVITATION') {
-      iconName = 'account-group';
-      iconFamily = 'material';
-    } else if (item.type === 'ROOM_JOINED') {
-      iconName = 'account-check';
-      iconFamily = 'material';
-    } else if (item.type === 'BADGE_EARNED') {
-      iconName = 'star-outline';
-      iconFamily = 'material';
-    } else if (item.type === 'CHECK_IN') {
-      iconName = 'user';
-      iconFamily = 'feather';
-    }
+    const isActionable = ((item as any).type === 'ROOM_INVITATION' || item.type === 'JOIN_REQUEST') && item.referenceId;
 
     return (
       <View
         key={item.id}
         className={`p-4 rounded-2xl mb-3 border ${
-          isActionable
-            ? 'bg-[#1D1712] border-[#3A2E1F]'
-            : 'bg-[#181513] border-[#2B2521]'
+          isActionable ? 'bg-[#1D1712] border-[#3A2E1F]' : 'bg-[#181513] border-[#2B2521]'
         }`}
       >
         <View className="flex-row items-start">
-          {/* Icon Circle */}
           <View className="w-10 h-10 bg-[#221C16] rounded-full items-center justify-center mr-3 mt-0.5 border border-[#3A2E1F]">
-            <Icon
-              name={iconName}
-              size={18}
-              color="#E8C08A"
-              family={iconFamily}
-            />
+            <Icon name="bell" size={18} color="#E8C08A" />
           </View>
 
-          {/* Content */}
           <View className="flex-1 pr-2">
             <Text className="text-sm font-semibold text-[#F5F2EC] leading-snug">
               {item.title}
@@ -143,18 +117,11 @@ export const NotificationScreen: React.FC<NotificationScreenProps> = ({
             {item.body ? (
               <Text className="text-xs text-[#9C958C] mt-0.5 leading-relaxed">{item.body}</Text>
             ) : null}
-            <Text className="text-[11px] text-[#65605A] mt-1.5 font-medium">
-              {formatTimeAgo(item.createdAt)}
-            </Text>
           </View>
 
-          {/* Unread indicator dot */}
-          {!item.isRead && (
-            <View className="w-2.5 h-2.5 rounded-full bg-[#E8C08A] mt-2" />
-          )}
+          {!item.isRead && <View className="w-2.5 h-2.5 rounded-full bg-[#E8C08A] mt-2" />}
         </View>
 
-        {/* Actionable Invitation / Join Request Buttons matching Figma */}
         {isActionable && item.referenceId && (
           <View className="flex-row mt-3 pt-3 border-t border-[#2B2521] space-x-3">
             <TouchableOpacity
@@ -165,7 +132,7 @@ export const NotificationScreen: React.FC<NotificationScreenProps> = ({
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => handleReject(item.referenceId!)}
-              className="flex-1 py-2.5 bg-[#181513] border border-[#2B2521] rounded-xl items-center"
+              className="flex-1 py-2.5 bg-[#181513] border border-[#2B2521] rounded-xl items-center ml-2"
             >
               <Text className="text-xs font-bold text-[#F5F2EC]">Decline</Text>
             </TouchableOpacity>
@@ -183,7 +150,7 @@ export const NotificationScreen: React.FC<NotificationScreenProps> = ({
       onRequestClose={onClose}
     >
       <View style={{ flex: 1, backgroundColor: '#0B0B0C' }}>
-        {/* Header matching Figma */}
+        {/* Header */}
         <View className="px-6 pt-14 pb-4 border-b border-[#2B2521] flex-row justify-between items-center bg-[#0B0B0C]">
           <TouchableOpacity onPress={onClose} className="p-2">
             <Icon name="arrow-left" size={20} color="#F5F2EC" />
@@ -195,8 +162,12 @@ export const NotificationScreen: React.FC<NotificationScreenProps> = ({
         </View>
 
         <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
-          {loading && notifications.length === 0 ? (
-            <ActivityIndicator size="large" color="#E8C08A" className="mt-10" />
+          {showSkeleton && notifications.length === 0 ? (
+            <View className="space-y-3 mt-4">
+              <NotificationRowSkeleton />
+              <NotificationRowSkeleton />
+              <NotificationRowSkeleton />
+            </View>
           ) : notifications.length === 0 ? (
             <View className="bg-[#181513] border border-[#2B2521] p-8 rounded-2xl items-center my-10">
               <Icon name="bell" size={32} color="#E8C08A" className="mb-3" />
@@ -207,7 +178,6 @@ export const NotificationScreen: React.FC<NotificationScreenProps> = ({
             </View>
           ) : (
             <View className="pb-16">
-              {/* TODAY Section */}
               {todayNotifications.length > 0 && (
                 <View className="mb-6">
                   <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-3">
@@ -217,7 +187,6 @@ export const NotificationScreen: React.FC<NotificationScreenProps> = ({
                 </View>
               )}
 
-              {/* EARLIER Section */}
               {earlierNotifications.length > 0 && (
                 <View className="mb-6">
                   <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-3">
@@ -231,17 +200,17 @@ export const NotificationScreen: React.FC<NotificationScreenProps> = ({
         </ScrollView>
 
         {/* Habit Match Gate Modal */}
-        {gateDetails && (
+        {pendingGateRoom && (
           <HabitMatchGate
-            visible={!!gateDetails}
-            roomName={gateDetails.roomName}
-            trackedHabits={gateDetails.trackedHabits}
+            visible={!!pendingGateRoom}
+            roomName={pendingGateRoom.roomName}
+            trackedHabits={pendingGateRoom.trackedHabits}
             userHabits={habits}
             apiClient={apiClient}
-            onClose={() => setGateDetails(null)}
+            onClose={() => setPendingGateRoom(null)}
             onCompleteJoin={async () => {
-              await executeAcceptInvitation(gateDetails.invitationItem);
-              setGateDetails(null);
+              await executeAcceptInvitation(pendingGateRoom.item);
+              setPendingGateRoom(null);
             }}
           />
         )}
@@ -249,15 +218,3 @@ export const NotificationScreen: React.FC<NotificationScreenProps> = ({
     </Modal>
   );
 };
-
-function formatTimeAgo(isoString: string): string {
-  const date = new Date(isoString);
-  const now = new Date();
-  const diffSec = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-  if (diffSec < 60) return 'Just now';
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
-  if (diffSec < 172800) return 'Yesterday';
-  return `${Math.floor(diffSec / 86400)} days ago`;
-}

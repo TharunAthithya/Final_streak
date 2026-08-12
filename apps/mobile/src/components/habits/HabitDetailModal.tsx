@@ -5,13 +5,15 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { HabitResponse } from '@streak/contracts';
 import { StreakApiClient } from '@streak/api-client';
 import { Icon } from '../ui/Icon';
 import { resolveHabitIcon, AVAILABLE_HABIT_ICONS } from '../../utils/habit-icons';
+import { SkeletonBox } from '../ui/SkeletonBox';
+import { useNotice } from '../ui/Notice';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 
 interface HabitDetailModalProps {
   visible: boolean;
@@ -30,13 +32,15 @@ export const HabitDetailModal: React.FC<HabitDetailModalProps> = ({
   onDelete,
   onUpdateIcon,
 }) => {
+  const notice = useNotice();
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
   const [monthCheckIns, setMonthCheckIns] = useState<any[]>([]);
   const [loadingCheckIns, setLoadingCheckIns] = useState(false);
+  const showCalendarSkeleton = useDelayedLoading(loadingCheckIns);
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [currentIcon, setCurrentIcon] = useState<string | undefined>(habit?.icon);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     if (habit) {
@@ -77,29 +81,18 @@ export const HabitDetailModal: React.FC<HabitDetailModalProps> = ({
     setCurrentMonthDate(next);
   };
 
-  const handleDelete = () => {
-    Alert.alert(
-      'Delete Habit',
-      `Are you sure you want to delete "${habit.name}"? This action cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              await onDelete(habit.id);
-              onClose();
-            } catch (e: any) {
-              Alert.alert('Error', e.message || 'Failed to delete habit');
-            } finally {
-              setDeleting(false);
-            }
-          },
-        },
-      ]
-    );
+  const handleConfirmDelete = async () => {
+    setShowDeleteConfirm(false);
+    setDeleting(true);
+    try {
+      await onDelete(habit.id);
+      notice.success('Habit deleted');
+      onClose();
+    } catch (e: any) {
+      notice.error(e.message || 'Failed to delete habit');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handlePickIcon = async (iconName: string) => {
@@ -107,10 +100,9 @@ export const HabitDetailModal: React.FC<HabitDetailModalProps> = ({
       setCurrentIcon(iconName);
       await onUpdateIcon(habit.id, iconName);
       setShowIconPicker(false);
-      setToastMessage('Icon updated successfully!');
-      setTimeout(() => setToastMessage(null), 2500);
+      notice.success('Icon updated successfully!');
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to update icon');
+      notice.error(e.message || 'Failed to update icon');
     }
   };
 
@@ -173,7 +165,7 @@ export const HabitDetailModal: React.FC<HabitDetailModalProps> = ({
 
           {/* Top Bar with Delete & Close */}
           <View className="flex-row justify-between items-center mb-4">
-            <TouchableOpacity onPress={handleDelete} className="p-2" disabled={deleting}>
+            <TouchableOpacity onPress={() => setShowDeleteConfirm(true)} className="p-2" disabled={deleting}>
               <Icon name="trash" size={18} color="#E8899A" />
             </TouchableOpacity>
             <TouchableOpacity onPress={onClose} className="w-8 h-8 rounded-full bg-[#221D1A] border border-[#2B2521] items-center justify-center">
@@ -182,91 +174,70 @@ export const HabitDetailModal: React.FC<HabitDetailModalProps> = ({
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
-            {/* Toast Message Banner */}
-            {toastMessage && (
-              <View className="mb-4 p-3 bg-[#1D1712] border border-[#E8C08A]/40 rounded-xl flex-row items-center justify-between">
-                <View className="flex-row items-center">
-                  <Icon name="check" size={16} color="#E8C08A" className="mr-2" />
-                  <Text className="text-xs font-semibold text-[#E8C08A]">{toastMessage}</Text>
-                </View>
-              </View>
-            )}
-
-            {/* Header / Icon / Title */}
+            {/* Hero Section */}
             <View className="items-center mb-6">
               <TouchableOpacity
                 onPress={() => setShowIconPicker(!showIconPicker)}
-                className="w-16 h-16 bg-[#221C16] border border-[#3A2E1F] rounded-2xl items-center justify-center mb-3 relative"
+                className="relative"
               >
-                <Icon name={resolvedIcon} size={28} color="#E8C08A" family="material" />
-                <View className="absolute -bottom-1 -right-1 bg-[#E8C08A] w-5 h-5 rounded-full items-center justify-center">
+                <View className="w-16 h-16 bg-[#221C16] border border-[#3A2E1F] rounded-2xl items-center justify-center mb-2">
+                  <Icon name={resolvedIcon} size={30} color="#E8C08A" family="material" />
+                </View>
+                <View className="absolute bottom-1 right-0 bg-[#E8C08A] rounded-full p-1 border border-[#141110]">
                   <Icon name="pencil" size={10} color="#241C14" />
                 </View>
               </TouchableOpacity>
-              <Text className="text-2xl font-bold text-[#F5F2EC] mb-1">{habit.name}</Text>
-              <Text className="text-xs text-[#9C958C]">Tap icon to change avatar</Text>
+              <Text className="text-xs text-[#9C958C]">Tap icon to change</Text>
+
+              <Text className="text-xl font-bold text-[#F5F2EC] mt-2 mb-1" style={{ fontFamily: 'Baloo 2' }}>
+                {habit.name}
+              </Text>
+              {habit.description ? (
+                <Text className="text-xs text-[#9C958C] text-center px-4">{habit.description}</Text>
+              ) : null}
             </View>
 
-            {/* Icon Picker Accordion */}
+            {/* Icon Picker Grid */}
             {showIconPicker && (
-              <View className="bg-[#181513] border border-[#2B2521] p-4 rounded-2xl mb-6">
-                <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-3">
-                  CHOOSE HABIT ICON
+              <View className="bg-[#181513] border border-[#2B2521] rounded-2xl p-4 mb-6">
+                <Text className="text-xs font-semibold text-[#65605A] uppercase tracking-wider mb-3">
+                  Choose Icon
                 </Text>
                 <View className="flex-row flex-wrap justify-between">
-                  {AVAILABLE_HABIT_ICONS.map((iconItem: { name: string; label: string }) => {
-                    const isSelected = resolvedIcon === iconItem.name;
-                    return (
-                      <TouchableOpacity
-                        key={iconItem.name}
-                        onPress={() => handlePickIcon(iconItem.name)}
-                        className={`w-11 h-11 rounded-xl items-center justify-center mb-2.5 ${
-                          isSelected ? 'bg-[#3A2E1F] border border-[#E8C08A]' : 'bg-[#221C16]'
-                        }`}
-                      >
-                        <Icon name={iconItem.name} size={20} color={isSelected ? '#E8C08A' : '#9C958C'} family="material" />
-                      </TouchableOpacity>
-                    );
-                  })}
+                  {AVAILABLE_HABIT_ICONS.slice(0, 15).map((iconObj) => (
+                    <TouchableOpacity
+                      key={iconObj.name}
+                      onPress={() => handlePickIcon(iconObj.name)}
+                      className={`w-11 h-11 rounded-xl items-center justify-center mb-2 border ${
+                        currentIcon === iconObj.name
+                          ? 'bg-[#221C16] border-[#E8C08A]'
+                          : 'bg-[#141110] border-[#2B2521]'
+                      }`}
+                    >
+                      <Icon name={iconObj.name} size={20} color="#E8C08A" family="material" />
+                    </TouchableOpacity>
+                  ))}
                 </View>
               </View>
             )}
 
-            {/* Stats Overview Grid */}
-            <View className="flex-row space-x-3 mb-6">
-              <View className="flex-1 bg-[#181513] border border-[#2B2521] p-4 rounded-2xl items-center mr-1.5">
-                <Icon name="streak" size={18} color="#E8C08A" className="mb-1" />
-                <Text className="text-xl font-bold text-[#F5F2EC]">{habit.stats?.currentStreak || 0}</Text>
-                <Text className="text-[11px] text-[#9C958C]">Current Streak</Text>
-              </View>
-              <View className="flex-1 bg-[#181513] border border-[#2B2521] p-4 rounded-2xl items-center mx-1.5">
-                <Icon name="trophy" size={18} color="#E8C08A" className="mb-1" />
-                <Text className="text-xl font-bold text-[#F5F2EC]">{habit.stats?.bestStreak || 0}</Text>
-                <Text className="text-[11px] text-[#9C958C]">Best Streak</Text>
-              </View>
-              <View className="flex-1 bg-[#181513] border border-[#2B2521] p-4 rounded-2xl items-center ml-1.5">
-                <Icon name="check" size={18} color="#E8C08A" className="mb-1" />
-                <Text className="text-xl font-bold text-[#F5F2EC]">{habit.stats?.totalCompletions || 0}</Text>
-                <Text className="text-[11px] text-[#9C958C]">Total Reps</Text>
-              </View>
-            </View>
-
-            {/* Monthly Progress Calendar Grid */}
-            <View className="bg-[#181513] border border-[#2B2521] p-5 rounded-2xl mb-8">
-              {/* Month Header */}
+            {/* Calendar Section Header */}
+            <View className="bg-[#181513] border border-[#2B2521] rounded-2xl p-4 mb-6">
               <View className="flex-row justify-between items-center mb-4">
-                <TouchableOpacity onPress={handlePrevMonth} className="p-1">
-                  <Icon name="chevron-left" size={18} color="#9C958C" />
-                </TouchableOpacity>
-                <Text className="text-sm font-bold text-[#F5F2EC]">
+                <Text className="text-xs font-semibold text-[#65605A] uppercase tracking-wider">
                   {monthName} {year}
                 </Text>
-                <TouchableOpacity onPress={handleNextMonth} className="p-1">
-                  <Icon name="chevron-right" size={18} color="#9C958C" />
-                </TouchableOpacity>
+                <View className="flex-row space-x-2">
+                  <TouchableOpacity onPress={handlePrevMonth} className="p-1">
+                    <Icon name="chevron-left" size={18} color="#9C958C" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleNextMonth} className="p-1">
+                    <Icon name="chevron-right" size={18} color="#9C958C" />
+                  </TouchableOpacity>
+                </View>
               </View>
 
-              {/* Day Name Headers */}
+              {/* Day Headers */}
               <View className="flex-row justify-between mb-2">
                 {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
                   <View key={i} className="w-8 items-center">
@@ -276,8 +247,8 @@ export const HabitDetailModal: React.FC<HabitDetailModalProps> = ({
               </View>
 
               {/* Days Grid */}
-              {loadingCheckIns ? (
-                <ActivityIndicator size="small" color="#E8C08A" className="my-6" />
+              {showCalendarSkeleton ? (
+                <SkeletonBox width="100%" height={120} borderRadius={12} className="my-2" />
               ) : (
                 <View className="flex-row flex-wrap justify-between">
                   {gridCells.map((cell, idx) => {
@@ -309,6 +280,16 @@ export const HabitDetailModal: React.FC<HabitDetailModalProps> = ({
           </ScrollView>
         </View>
       </View>
+
+      <ConfirmDialog
+        visible={showDeleteConfirm}
+        title="Delete Habit"
+        message={`Are you sure you want to delete "${habit.name}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </Modal>
   );
 };

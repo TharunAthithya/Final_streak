@@ -74,6 +74,7 @@ export interface HabitResponse {
   createdAt: string;
   stats?: HabitStatsResponse;
   checkIns?: Array<{ id: string; localDate: string; status?: string }>;
+  daysOfWeek?: number[];
   freezeDaysAvailable: number;
   lastFreezeReset: string;
 }

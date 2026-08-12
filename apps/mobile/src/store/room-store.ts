@@ -52,7 +52,12 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   },
 
   fetchRooms: async (apiClient) => {
-    set({ loading: true, error: null });
+    const isFirstLoad = get().rooms.length === 0;
+    if (isFirstLoad) {
+      set({ loading: true, error: null });
+    } else {
+      set({ error: null });
+    }
     try {
       const data = await apiClient.getRooms();
       set({ rooms: data, loading: false });
@@ -111,7 +116,13 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   },
 
   fetchRoomDetails: async (apiClient, roomId) => {
-    set({ loadingDetails: true, error: null });
+    const currentDetails = get().selectedRoomDetails;
+    const isFirstLoad = !currentDetails || currentDetails.id !== roomId;
+    if (isFirstLoad) {
+      set({ loadingDetails: true, error: null });
+    } else {
+      set({ error: null });
+    }
     try {
       const details = await apiClient.getRoomDetails(roomId);
       let board: any[] = [];

@@ -85,7 +85,7 @@ export class StreakApiClient {
         const todayStr = new Date().toISOString().split('T')[0];
         const query = this.supabase
             .from('habits')
-            .select('*, habit_stats(*), check_ins(id, local_date)');
+            .select('*, habit_stats(*), check_ins(id, local_date, status), habit_schedule_days(day_of_week)');
         if (!includeArchived) {
             query.eq('status', 'ACTIVE');
         }
@@ -96,6 +96,7 @@ export class StreakApiClient {
             const todayCheckIn = h.check_ins?.find((c) => c.local_date === todayStr);
             const completedToday = !!todayCheckIn;
             const todayCheckInId = todayCheckIn?.id || null;
+            const daysOfWeek = h.habit_schedule_days?.map((d) => d.day_of_week) || [];
             return {
                 id: h.id,
                 userId: h.profile_id,
@@ -112,13 +113,14 @@ export class StreakApiClient {
                 todayCheckInId,
                 archivedAt: h.archived_at,
                 createdAt: h.created_at,
+                daysOfWeek,
                 stats: h.habit_stats ? {
                     currentStreak: h.habit_stats.current_streak,
                     bestStreak: h.habit_stats.best_streak,
                     totalCompletions: h.habit_stats.total_completions,
                     completionRate: Number(h.habit_stats.completion_rate),
                 } : undefined,
-                checkIns: h.check_ins?.map((c) => ({ id: c.id, localDate: c.local_date, status: 'COMPLETED' })) || [],
+                checkIns: h.check_ins?.map((c) => ({ id: c.id, localDate: c.local_date, status: c.status || 'COMPLETED' })) || [],
                 freezeDaysAvailable: h.freeze_days_available,
                 lastFreezeReset: h.last_freeze_reset,
             };
@@ -615,6 +617,7 @@ export class StreakApiClient {
                 roomId: a.room_id,
                 type: a.type,
                 message: a.message,
+                metadata_json: a.metadata_json,
                 createdAt: a.created_at,
                 isOwn: a.actor_profile_id === user.id,
                 reactions: reactionsMap,
@@ -797,20 +800,50 @@ export class StreakApiClient {
         return data;
     }
     async updateHabit(habitId, dto) {
+        const updatePayload = {
+            updated_at: new Date().toISOString(),
+        };
+        if (dto.name !== undefined)
+            updatePayload.name = dto.name;
+        if (dto.description !== undefined)
+            updatePayload.description = dto.description;
+        if (dto.icon !== undefined)
+            updatePayload.icon = dto.icon;
+        if (dto.scheduleType !== undefined)
+            updatePayload.schedule_type = dto.scheduleType;
+        if (dto.reminderTime !== undefined)
+            updatePayload.reminder_time = dto.reminderTime;
         const { data, error } = await this.supabase
             .from('habits')
-            .update({
-            name: dto.name,
-            description: dto.description,
-            icon: dto.icon,
-            reminder_time: dto.reminderTime,
-            updated_at: new Date().toISOString(),
-        })
+            .update(updatePayload)
             .eq('id', habitId)
             .select()
             .single();
         if (error)
             throw new Error(error.message);
+        // Update habit schedule days if scheduleType or daysOfWeek is provided
+        if (dto.scheduleType !== undefined || dto.daysOfWeek !== undefined) {
+            // Delete existing schedule days for this habit
+            const { error: deleteErr } = await this.supabase
+                .from('habit_schedule_days')
+                .delete()
+                .eq('habit_id', habitId);
+            if (deleteErr)
+                throw new Error(deleteErr.message);
+            // Insert new schedule days if SPECIFIC_DAYS
+            const targetScheduleType = dto.scheduleType || data.schedule_type;
+            if (targetScheduleType === 'SPECIFIC_DAYS' && dto.daysOfWeek && dto.daysOfWeek.length > 0) {
+                const scheduleDays = dto.daysOfWeek.map((day) => ({
+                    habit_id: habitId,
+                    day_of_week: day,
+                }));
+                const { error: insertErr } = await this.supabase
+                    .from('habit_schedule_days')
+                    .insert(scheduleDays);
+                if (insertErr)
+                    throw new Error(insertErr.message);
+            }
+        }
         return data;
     }
     async deleteRoom(roomId) {

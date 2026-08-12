@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { Icon } from '../ui/Icon';
+import { DotPulse } from '../ui/DotPulse';
 
 interface FreezeConfirmationCardProps {
   selectedDateStr: string;
@@ -61,7 +62,7 @@ export const FreezeConfirmationCard: React.FC<FreezeConfirmationCardProps> = ({
           className="flex-1 py-3 bg-[#E8C08A] rounded-xl items-center justify-center ml-1.5 flex-row"
         >
           {loading ? (
-            <ActivityIndicator color="#241C14" size="small" />
+            <DotPulse color="#241C14" size={5} />
           ) : (
             <>
               <Icon name="check" size={14} color="#241C14" className="mr-1.5" />

@@ -1,5 +1,6 @@
 import React from 'react';
-import { TouchableOpacity, Text, ActivityIndicator } from 'react-native';
+import { TouchableOpacity, Text } from 'react-native';
+import { DotPulse } from './DotPulse';
 
 interface ButtonProps {
   title: string;
@@ -51,7 +52,7 @@ export const Button: React.FC<ButtonProps> = ({
       className={`px-5 py-3.5 rounded-xl flex-row justify-center items-center ${getStyles()} ${disabled ? 'opacity-50' : ''} ${className}`}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' || variant === 'danger' ? '#FFFFFF' : '#256D4A'} size="small" />
+        <DotPulse color={variant === 'primary' || variant === 'danger' ? '#FFFFFF' : '#E8C08A'} size={6} />
       ) : (
         <Text className={`text-base ${getTextStyle()}`}>{title}</Text>
       )}

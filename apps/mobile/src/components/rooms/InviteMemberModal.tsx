@@ -5,8 +5,6 @@ import {
   Text,
   TouchableOpacity,
   TextInput,
-  ActivityIndicator,
-  Alert,
   FlatList,
   Share,
 } from 'react-native';
@@ -14,6 +12,8 @@ import * as Clipboard from 'expo-clipboard';
 import { Icon } from '../ui/Icon';
 import { Avatar } from './Avatar';
 import { StreakApiClient } from '@streak/api-client';
+import { DotPulse } from '../ui/DotPulse';
+import { useNotice } from '../ui/Notice';
 
 interface SearchResult {
   id: string;
@@ -25,7 +25,7 @@ interface SearchResult {
 interface InviteMemberModalProps {
   visible: boolean;
   roomId: string;
-  inviteCode?: string;
+  inviteCode: string;
   existingMemberIds?: Set<string>;
   pendingInviteeIds?: Set<string>;
   apiClient: StreakApiClient;
@@ -36,46 +36,50 @@ interface InviteMemberModalProps {
 export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({
   visible,
   roomId,
-  inviteCode = 'CODE-7F3K9',
+  inviteCode,
   existingMemberIds = new Set(),
   pendingInviteeIds = new Set(),
   apiClient,
   onClose,
   onInvitationSent,
 }) => {
+  const notice = useNotice();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [localPendingIds, setLocalPendingIds] = useState<Set<string>>(new Set());
-  const [copied, setCopied] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleSearch = useCallback(
-    (text: string) => {
-      setQuery(text);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
+  const handleSearch = (text: string) => {
+    setQuery(text);
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+    }
 
-      if (text.trim().length < 2) {
+    if (!text.trim()) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+
+    setSearching(true);
+    searchTimerRef.current = setTimeout(() => {
+      executeSearch(text.trim());
+    }, 400);
+  };
+
+  const executeSearch = useCallback(
+    async (searchTerm: string) => {
+      try {
+        const users = await apiClient.searchUsersByUsername(searchTerm);
+        setResults(users);
+      } catch (e) {
         setResults([]);
-        return;
+      } finally {
+        setSearching(false);
       }
-
-      debounceRef.current = setTimeout(async () => {
-        setSearching(true);
-        try {
-          const data = await apiClient.searchUsersByUsername(text);
-          setResults(data);
-        } catch (e) {
-          console.warn('Search failed:', e);
-          setResults([]);
-        } finally {
-          setSearching(false);
-        }
-      }, 300);
     },
     [apiClient]
   );
@@ -88,9 +92,9 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({
       if (onInvitationSent) {
         onInvitationSent(user);
       }
-      Alert.alert('Invitation Sent', `@${user.username} will receive a notification.`);
+      notice.success(`Invitation sent to @${user.username}`);
     } catch (e: any) {
-      Alert.alert('Invite Error', e.message || 'Failed to send room invitation.');
+      notice.error(e.message || 'Failed to send room invitation');
     } finally {
       setSendingId(null);
     }
@@ -99,18 +103,17 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({
   const handleCopyLink = async () => {
     const inviteLink = `https://streak.app/join/${inviteCode}`;
     await Clipboard.setStringAsync(inviteLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    notice.success('Invite link copied to clipboard!');
   };
 
-  const handleShareLink = async () => {
+  const handleShare = async () => {
+    const inviteLink = `https://streak.app/join/${inviteCode}`;
     try {
-      const inviteLink = `https://streak.app/join/${inviteCode}`;
       await Share.share({
-        message: `Join my room on Streak to keep daily promises together! Code: ${inviteCode}\n${inviteLink}`,
+        message: `Join my accountability room on Final Streak! Code: ${inviteCode}\n${inviteLink}`,
       });
     } catch (e: any) {
-      console.warn('Share error:', e);
+      // Ignored
     }
   };
 
@@ -126,31 +129,31 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({
     const isPending = pendingInviteeIds.has(item.id) || localPendingIds.has(item.id);
 
     return (
-      <View className="flex-row items-center py-3 px-3 bg-[#181513] border border-[#2B2521] rounded-xl mb-2.5">
-        <Avatar name={item.displayName} size={36} />
-
-        <View className="flex-1 ml-3">
-          <Text className="text-sm font-bold text-[#F5F2EC]">{item.displayName}</Text>
-          <Text className="text-xs text-[#9C958C]">@{item.username}</Text>
+      <View className="flex-row items-center justify-between p-3.5 bg-[#181513] border border-[#2B2521] rounded-2xl mb-2.5">
+        <View className="flex-row items-center flex-1 mr-3">
+          <Avatar name={item.displayName} size={36} />
+          <View className="ml-3 flex-1">
+            <Text className="text-sm font-bold text-[#F5F2EC]">{item.displayName}</Text>
+            <Text className="text-xs text-[#9C958C]">@{item.username}</Text>
+          </View>
         </View>
 
         {isMember ? (
-          <View className="px-3 py-1 bg-[#1C2C22] border border-[#8FBF9E]/40 rounded-full flex-row items-center">
-            <View className="w-1.5 h-1.5 rounded-full bg-[#8FBF9E] mr-1" />
-            <Text className="text-[11px] font-bold text-[#8FBF9E]">Joined</Text>
+          <View className="px-3 py-1 bg-[#221C16] border border-[#2B2521] rounded-xl">
+            <Text className="text-xs text-[#9C958C]">Member</Text>
           </View>
         ) : isPending ? (
-          <View className="px-3 py-1 bg-[#332415] border border-[#D97706]/40 rounded-full">
-            <Text className="text-[11px] font-bold text-[#F59E0B]">Invitation Pending</Text>
+          <View className="px-3 py-1 bg-[#221C16] border border-[#E8C08A]/40 rounded-xl">
+            <Text className="text-xs text-[#E8C08A] font-semibold">Invited</Text>
           </View>
         ) : (
           <TouchableOpacity
             onPress={() => handleSendInvite(item)}
             disabled={sendingId === item.id}
-            className="px-4 py-1.5 bg-[#E8C08A] rounded-xl flex-row items-center"
+            className="px-4 py-1.5 bg-[#E8C08A] rounded-xl flex-row items-center min-w-[64px] justify-center"
           >
             {sendingId === item.id ? (
-              <ActivityIndicator size="small" color="#241C14" />
+              <DotPulse color="#241C14" size={4} />
             ) : (
               <Text className="text-xs font-bold text-[#241C14]">Invite</Text>
             )}
@@ -216,7 +219,7 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({
                 autoCorrect={false}
                 className="flex-1 text-[#F5F2EC] text-sm"
               />
-              {searching && <ActivityIndicator size="small" color="#E8C08A" />}
+              {searching && <DotPulse color="#E8C08A" size={4} />}
             </View>
           </View>
 
@@ -253,14 +256,12 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({
                 onPress={handleCopyLink}
                 className="flex-1 bg-[#241E1A] border border-[#2B2521] py-2.5 rounded-xl items-center flex-row justify-center"
               >
-                <Icon name={copied ? 'check' : 'copy'} size={14} color={copied ? '#8FBF9E' : '#E8C08A'} className="mr-1.5" />
-                <Text className={`text-xs font-bold ${copied ? 'text-[#8FBF9E]' : 'text-[#F5F2EC]'}`}>
-                  {copied ? 'Copied Link' : 'Copy Link'}
-                </Text>
+                <Icon name="copy" size={14} color="#E8C08A" className="mr-1.5" />
+                <Text className="text-xs font-bold text-[#F5F2EC]">Copy Link</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={handleShareLink}
+                onPress={handleShare}
                 className="flex-1 bg-[#241E1A] border border-[#2B2521] py-2.5 rounded-xl items-center flex-row justify-center"
               >
                 <Icon name="arrow-right" size={14} color="#E8C08A" className="mr-1.5" />

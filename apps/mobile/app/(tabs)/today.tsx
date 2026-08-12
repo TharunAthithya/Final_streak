@@ -4,9 +4,7 @@ import {
   View,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   TextInput,
-  Alert,
   Modal,
   AppState,
   Platform,
@@ -18,27 +16,35 @@ import { useSyncStore } from '../../src/store/sync-store';
 import { useHabitStore } from '../../src/store/habit-store';
 import { useNotificationStore } from '../../src/store/notification-store';
 import { HabitCard } from '../../src/components/habits/HabitCard';
+import { OtherDayHabitRow } from '../../src/components/habits/OtherDayHabitRow';
 import { HabitDetailsSheet } from '../../src/components/habits/HabitDetailsSheet';
 import { CreateHabitBottomSheet } from '../../src/components/habits/CreateHabitBottomSheet';
 import { NotificationBell } from '../../src/components/ui/NotificationBell';
 import { NotificationScreen } from '../../src/components/ui/NotificationScreen';
 import { ProgressRing } from '../../src/components/habits/ProgressRing';
 import { SessionStatus } from '../../src/components/habits/RecentSessionsStrip';
+import { HabitCardSkeleton } from '../../src/components/ui/skeletons/HabitCardSkeleton';
+import { DotPulse } from '../../src/components/ui/DotPulse';
+import { useNotice } from '../../src/components/ui/Notice';
+import { useDelayedLoading } from '../../src/hooks/useDelayedLoading';
 import NetInfo from '@react-native-community/netinfo';
 import { useHomeHero } from '../../src/hooks/useHomeHero';
 import { useDailyStoryStore } from '../../src/store/daily-story-store';
 import { BeforeYouBeginCard } from '../../src/components/coaching/BeforeYouBeginCard';
 import { DailyStoryModal } from '../../src/components/coaching/DailyStoryModal';
-import { isHabitScheduledForDate, getHabitScheduleLabel, getSyncAwareHabits, toLocalDateString } from '../../src/utils/streak';
+import { isHabitScheduledForDate, getHabitScheduleLabel, getNextScheduledDay, getSyncAwareHabits, toLocalDateString } from '../../src/utils/streak';
 import { Icon } from '../../src/components/ui/Icon';
 import { calculateCalendarGridStatuses, getCalendarGridDates, validateFreeze } from '../../src/utils/freeze';
 import { resolveHabitIcon } from '../../src/utils/habit-icons';
 
 export default function TodayScreen() {
   const { apiClient, user } = useAuthStore();
-  const { pendingQueue, enqueueCompleteHabit, syncQueue, isSyncing, enqueueFreezeHabit } = useSyncStore();
+  const { pendingQueue, enqueueCompleteHabit, syncQueue, isSyncing, enqueueFreezeHabit, enqueueUndoHabit } = useSyncStore();
   const { habits, loading, fetchHabits, createHabit, updateHabit, checkInHabit, undoCheckIn, freezeHabit } = useHabitStore();
   const { unreadCount, fetchNotifications } = useNotificationStore();
+
+  const notice = useNotice();
+  const showSkeleton = useDelayedLoading(loading);
 
   const [isOfflineMode, setIsOfflineMode] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -153,25 +159,30 @@ export default function TodayScreen() {
     return aDoneForSort - bDoneForSort;
   });
 
+  const otherDayHabits = syncAwareHabits.filter(
+    (h) => h.status === 'ACTIVE' && !isHabitScheduledForDate(h, todayStr)
+  );
+
   const selectedHabit = selectedHabitForDetail
     ? syncAwareHabits.find((h) => h.id === selectedHabitForDetail.id) || selectedHabitForDetail
     : null;
 
   const handleToggleCheckIn = async (habit: any) => {
-    const isCompleted = (habit as any).completedToday;
+    const todayStr = toLocalDateString(new Date());
     const key = `mobile-idemp-${habit.id}-${todayStr}-${Date.now()}`;
     const tz = user?.timezone || 'UTC';
+
     try {
-      if (isCompleted) {
+      if (habit.completedToday && habit.todayCheckInId) {
         await undoCheckIn(
           apiClient,
           habit.id,
-          habit.todayCheckInId || 'placeholder-cid',
+          habit.todayCheckInId,
           todayStr,
           tz,
           key,
           isOfflineMode,
-          async () => {}
+          enqueueUndoHabit
         );
       } else {
         await checkInHabit(
@@ -184,11 +195,11 @@ export default function TodayScreen() {
           enqueueCompleteHabit
         );
         if (isOfflineMode) {
-          Alert.alert('Offline Mode', 'Check-in enqueued. Will sync when back online.');
+          notice.info('Offline Mode: Check-in enqueued. Will sync when back online.');
         }
       }
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      notice.error(e.message || 'Failed to toggle habit check-in');
     }
   };
 
@@ -198,10 +209,10 @@ export default function TodayScreen() {
     try {
       await freezeHabit(apiClient, habitId, targetDate, tz, key, isOfflineMode, enqueueFreezeHabit);
       if (isOfflineMode) {
-        Alert.alert('Offline Mode', 'Freeze enqueued. Will sync when back online.');
+        notice.info('Offline Mode: Freeze enqueued. Will sync when back online.');
       }
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      notice.error(e.message || 'Failed to freeze habit');
     }
   };
 
@@ -223,8 +234,9 @@ export default function TodayScreen() {
         startDate: toLocalDateString(new Date()),
       });
       setShowCreate(false);
+      notice.success('Habit created successfully!');
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to create habit');
+      notice.error(e.message || 'Failed to create habit');
     }
   };
 
@@ -295,7 +307,7 @@ export default function TodayScreen() {
                 {isSyncing ? 'Syncing...' : `${pendingQueue.length} check-ins pending. Tap to force.`}
               </Text>
             </View>
-            {isSyncing && <ActivityIndicator size="small" color="#E8C08A" />}
+            {isSyncing && <DotPulse size={4} color="#E8C08A" />}
           </TouchableOpacity>
         )}
 
@@ -354,8 +366,8 @@ export default function TodayScreen() {
 
         {/* Habits Header */}
         <View className="px-6 mb-3 flex-row justify-between items-center">
-          <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest">
-            Today's Promises ({todayHabits.length})
+          <Text className="text-lg font-bold text-[#F5F2EC]">
+            Today's Habits
           </Text>
           {todayHabits.length > 3 && (
             <TouchableOpacity onPress={() => setShowAllHabits(true)}>
@@ -366,39 +378,63 @@ export default function TodayScreen() {
 
         {/* Habit Cards */}
         <View className="px-6 pb-24">
-          {loading ? (
-            <ActivityIndicator size="large" color="#E8C08A" className="mt-10" />
-          ) : todayHabits.length === 0 ? (
+          {showSkeleton ? (
+            <View className="space-y-3">
+              <HabitCardSkeleton />
+              <HabitCardSkeleton />
+              <HabitCardSkeleton />
+            </View>
+          ) : todayHabits.length === 0 && otherDayHabits.length === 0 ? (
             <View className="bg-[#181513] border border-[#2B2521] p-8 rounded-2xl items-center mt-4">
               <Icon name="book" size={32} color="#E8C08A" className="mb-2" />
-              <Text className="text-base font-semibold text-[#F5F2EC]">No habits scheduled for today</Text>
+              <Text className="text-base font-semibold text-[#F5F2EC]">No habits created yet</Text>
               <Text className="text-xs text-[#9C958C] mt-1 text-center">
                 Tap the + button below to create your first habit promise.
               </Text>
             </View>
           ) : (
-            todayHabits.map((habit) => {
-              const gridDates = getCalendarGridDates();
-              const freezableDates = gridDates.filter((d) => validateFreeze(habit, d).valid);
-              return (
-                <HabitCard
-                  key={habit.id}
-                  name={habit.name}
-                  iconName={habit.icon}
-                  reminderTime={habit.reminderTime}
-                  scheduleLabel={getHabitScheduleLabel(habit)}
-                  currentStreak={habit.stats?.currentStreak || 0}
-                  statuses={calculateCalendarGridStatuses(habit)}
-                  completionStatus={(habit as any).completedToday ? 'completed' : 'pending'}
-                  onToggleComplete={() => handleToggleCheckIn(habit)}
-                  freezeDaysAvailable={habit.freezeDaysAvailable}
-                  dates={gridDates}
-                  freezableDates={freezableDates}
-                  onFreeze={(date) => handleFreezeHabit(habit.id, date)}
-                  onCardPress={() => setSelectedHabitForDetail(habit)}
-                />
-              );
-            })
+            <>
+              {/* Today's Habits List */}
+              {todayHabits.map((habit) => {
+                const gridDates = getCalendarGridDates();
+                const freezableDates = gridDates.filter((d) => validateFreeze(habit, d).valid);
+                return (
+                  <HabitCard
+                    key={habit.id}
+                    name={habit.name}
+                    iconName={habit.icon}
+                    reminderTime={habit.reminderTime}
+                    scheduleLabel={getHabitScheduleLabel(habit)}
+                    currentStreak={habit.stats?.currentStreak || 0}
+                    statuses={calculateCalendarGridStatuses(habit)}
+                    completionStatus={(habit as any).completedToday ? 'completed' : 'pending'}
+                    onToggleComplete={() => handleToggleCheckIn(habit)}
+                    freezeDaysAvailable={habit.freezeDaysAvailable}
+                    dates={gridDates}
+                    freezableDates={freezableDates}
+                    onFreeze={(date) => handleFreezeHabit(habit.id, date)}
+                    onCardPress={() => setSelectedHabitForDetail(habit)}
+                  />
+                );
+              })}
+
+              {/* Other Days Section */}
+              {otherDayHabits.length > 0 && (
+                <View className="mt-5">
+                  <Text className="text-base font-bold text-[#9C958C] mb-3">
+                    Other Days
+                  </Text>
+                  {otherDayHabits.map((habit) => (
+                    <OtherDayHabitRow
+                      key={habit.id}
+                      name={habit.name}
+                      nextDayLabel={getNextScheduledDay(habit)}
+                      onCardPress={() => setSelectedHabitForDetail(habit)}
+                    />
+                  ))}
+                </View>
+              )}
+            </>
           )}
         </View>
       </ScrollView>
@@ -438,8 +474,12 @@ export default function TodayScreen() {
 
           {/* List of Habits */}
           <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
-            {loading ? (
-              <ActivityIndicator size="large" color="#E8C08A" className="mt-10" />
+            {showSkeleton ? (
+              <View className="space-y-3">
+                <HabitCardSkeleton />
+                <HabitCardSkeleton />
+                <HabitCardSkeleton />
+              </View>
             ) : todayHabits.length === 0 ? (
               <View className="bg-[#181513] border border-[#2B2521] p-8 rounded-2xl items-center mt-4">
                 <Icon name="book" size={32} color="#E8C08A" className="mb-2" />

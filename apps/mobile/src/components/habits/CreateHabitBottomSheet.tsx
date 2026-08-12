@@ -8,15 +8,15 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
   TouchableWithoutFeedback,
   Keyboard,
-  Alert,
 } from 'react-native';
 import { Icon } from '../ui/Icon';
 import { RecentSessionsStrip } from './RecentSessionsStrip';
 import { CompletionButton } from './CompletionButton';
 import { AVAILABLE_HABIT_ICONS, resolveHabitIcon } from '../../utils/habit-icons';
+import { DotPulse } from '../ui/DotPulse';
+import { useNotice } from '../ui/Notice';
 
 import { HabitResponse } from '@streak/contracts';
 
@@ -49,6 +49,7 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
   initialHabit,
   onUpdate,
 }) => {
+  const notice = useNotice();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [selectedIcon, setSelectedIcon] = useState('target');
@@ -116,7 +117,7 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
       if (prev.includes(dayIndex)) {
         if (prev.length === 1) {
           // Prevent zero selected weekdays
-          Alert.alert('Scheduling Error', 'At least one day must be scheduled.');
+          notice.warning('At least one day must be scheduled.');
           return prev;
         }
         return prev.filter((d) => d !== dayIndex);
@@ -133,7 +134,7 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
       return;
     }
     if (scheduleType === 'SPECIFIC_DAYS' && selectedDays.length === 0) {
-      Alert.alert('Scheduling Error', 'Please select at least one day.');
+      notice.warning('Please select at least one day.');
       return;
     }
 
@@ -446,7 +447,7 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
                   }`}
                 >
                   {loading ? (
-                    <ActivityIndicator color="#241C14" />
+                    <DotPulse color="#241C14" size={6} />
                   ) : (
                     <Text
                       className={`font-bold text-base ${

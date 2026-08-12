@@ -6,8 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useAuthStore } from '../../src/store/auth-store';
 import { useRoomStore } from '../../src/store/room-store';
@@ -21,11 +19,15 @@ import { RoomDetailsHub } from '../../src/components/rooms/RoomDetailsHub';
 import { ReactionKind } from '../../src/components/rooms/ReactionPill';
 import { HabitMatchGate } from '../../src/components/rooms/HabitMatchGate';
 import { toLocalDateString } from '../../src/utils/streak';
+import { RoomCardSkeleton } from '../../src/components/ui/skeletons/RoomCardSkeleton';
+import { useNotice } from '../../src/components/ui/Notice';
+import { useDelayedLoading } from '../../src/hooks/useDelayedLoading';
 
 export default function RoomsScreen() {
   const { user, apiClient } = useAuthStore();
   const { habits, fetchHabits, createHabit, checkInHabit } = useHabitStore();
   const { enqueueCompleteHabit } = useSyncStore();
+  const notice = useNotice();
   const isOfflineMode = false;
   const {
     rooms,
@@ -45,31 +47,35 @@ export default function RoomsScreen() {
     toggleActivityReaction,
   } = useRoomStore();
 
+  const showSkeleton = useDelayedLoading(loading);
+
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [showInfoSheet, setShowInfoSheet] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showJoin, setShowJoin] = useState(false);
+  const [inviteCode, setInviteCode] = useState('');
+
+  // Habit matching gate state
+  const [pendingGateRoom, setPendingGateRoom] = useState<{
+    code: string;
+    roomName: string;
+    trackedHabits: any[];
+    inviteCode: string;
+  } | null>(null);
 
   // Reset selected room view whenever user navigates away from Rooms tab
   useFocusEffect(
     useCallback(() => {
+      fetchRooms(apiClient);
+      fetchHabits(apiClient);
       return () => {
         setSelectedRoomId(null);
         setShowInfoSheet(false);
         setShowInviteModal(false);
       };
-    }, [])
+    }, [apiClient])
   );
-
-  // Forms Visibility
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showJoin, setShowJoin] = useState(false);
-
-  // Join Form State
-  const [inviteCode, setInviteCode] = useState('');
-
-  useEffect(() => {
-    fetchRooms(apiClient);
-  }, []);
 
   useEffect(() => {
     if (selectedRoomId) {
@@ -77,17 +83,11 @@ export default function RoomsScreen() {
       fetchRoomActivities(apiClient, selectedRoomId);
       fetchRoomMembers(apiClient, selectedRoomId);
 
-      // Supabase Realtime Subscription for Activity Feed & Reactions
       const channel = apiClient.supabase
         .channel(`room-realtime-${selectedRoomId}`)
         .on(
           'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'activities',
-            filter: `room_id=eq.${selectedRoomId}`,
-          },
+          { event: '*', schema: 'public', table: 'activities', filter: `room_id=eq.${selectedRoomId}` },
           () => {
             fetchRoomActivities(apiClient, selectedRoomId);
             fetchRoomMembers(apiClient, selectedRoomId);
@@ -95,11 +95,7 @@ export default function RoomsScreen() {
         )
         .on(
           'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'reactions',
-          },
+          { event: '*', schema: 'public', table: 'reactions' },
           () => {
             fetchRoomActivities(apiClient, selectedRoomId);
           }
@@ -110,28 +106,24 @@ export default function RoomsScreen() {
         apiClient.supabase.removeChannel(channel);
       };
     }
-  }, [selectedRoomId]);
-
-  // Gate modal state for pre-join habit verification
-  const [gateInfo, setGateInfo] = useState<{
-    roomName: string;
-    trackedHabits: any[];
-    inviteCode: string;
-  } | null>(null);
+  }, [selectedRoomId, apiClient]);
 
   const handleJoinRoom = async () => {
     if (!inviteCode.trim()) return;
     const cleanCode = inviteCode.trim().toUpperCase();
-    try {
-      // Look up room info and tracked habits
-      const roomInfo = await apiClient.getRoomByInviteCode(cleanCode);
-      const tracked = roomInfo.trackedHabits || [];
-      const userHabitNames = habits.map((h) => h.name.toLowerCase().trim());
-      const missing = tracked.filter((th: any) => !userHabitNames.includes(th.name.toLowerCase().trim()));
 
-      if (missing.length > 0) {
-        setGateInfo({
-          roomName: roomInfo.roomName,
+    try {
+      const details = await apiClient.getRoomByInviteCode(cleanCode);
+      const tracked = details.trackedHabits || [];
+
+      const missingHabits = tracked.filter(
+        (th: any) => !habits.some((h) => h.name.toLowerCase() === th.name.toLowerCase())
+      );
+
+      if (missingHabits.length > 0) {
+        setPendingGateRoom({
+          code: cleanCode,
+          roomName: details.roomName,
           trackedHabits: tracked,
           inviteCode: cleanCode,
         });
@@ -140,7 +132,7 @@ export default function RoomsScreen() {
 
       await executeJoinRoom(cleanCode);
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      notice.error(e.message || 'Failed to find room with that code');
     }
   };
 
@@ -149,9 +141,9 @@ export default function RoomsScreen() {
     setInviteCode('');
     setShowJoin(false);
     if (res?.requestSent) {
-      Alert.alert('Request Sent!', `Your request to join ${res.roomName || 'this room'} has been sent to the room owner for approval.`);
+      notice.info(`Your request to join ${res.roomName || 'this room'} has been sent to the owner for approval.`);
     } else {
-      Alert.alert('Success!', 'You have joined the room!');
+      notice.success('You have joined the room!');
     }
   };
 
@@ -165,7 +157,6 @@ export default function RoomsScreen() {
 
     let targetHabit = habits.find((h) => h.name.toLowerCase() === habitName.toLowerCase());
 
-    // If user does not have a personal habit matching this room habit yet, auto-create it
     if (!targetHabit) {
       try {
         targetHabit = await createHabit(apiClient, {
@@ -175,7 +166,7 @@ export default function RoomsScreen() {
           timezone: tz,
         });
       } catch (e: any) {
-        Alert.alert('Habit Creation Error', e.message || `Could not auto-create habit for "${habitName}".`);
+        notice.error(e.message || `Could not auto-create habit for "${habitName}".`);
         return;
       }
     }
@@ -273,7 +264,7 @@ export default function RoomsScreen() {
     );
   }
 
-  // ROOMS LIST VIEW (Matching Figma "Accountability Rooms")
+  // ROOMS LIST VIEW
   return (
     <View className="flex-1 bg-[#0B0B0C]">
       <ScrollView className="flex-1 px-6 pt-20" showsVerticalScrollIndicator={false}>
@@ -283,7 +274,7 @@ export default function RoomsScreen() {
           <Text className="text-sm text-[#9C958C]">Share streaks and complete targets</Text>
         </View>
 
-        {/* Buttons matching Figma design */}
+        {/* Action Buttons */}
         <View className="flex-row mb-8">
           <TouchableOpacity
             onPress={() => {
@@ -302,29 +293,14 @@ export default function RoomsScreen() {
             }}
             className="flex-1 bg-[#181513] border border-[#2B2521] py-3.5 rounded-xl items-center flex-row justify-center ml-2 shadow-sm"
           >
-            <Icon name="arrow-right" size={16} color="#F5F2EC" className="mr-1.5" />
-            <Text className="text-[#F5F2EC] font-bold text-sm">Join Room</Text>
+            <Icon name="users" size={16} color="#E8C08A" className="mr-1.5" />
+            <Text className="text-[#E8C08A] font-bold text-sm">Join Room</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Multi-Step Create Room Modal */}
-        <CreateRoomModal
-          visible={showCreateModal}
-          userHabits={habits}
-          apiClient={apiClient}
-          onClose={() => setShowCreateModal(false)}
-          onRoomCreated={(newRoom) => {
-            fetchRooms(apiClient);
-            if (newRoom && newRoom.id) {
-              setSelectedRoomId(newRoom.id);
-            }
-          }}
-        />
-
-        {/* Join Form */}
+        {/* Join Room Form */}
         {showJoin && (
-          <View className="bg-[#181513] border border-[#2B2521] p-5 rounded-2xl mb-6 shadow-sm">
-            <Text className="text-base font-bold text-[#F5F2EC] mb-4">Join Room</Text>
+          <View className="bg-[#181513] border border-[#2B2521] p-5 rounded-2xl mb-6">
             <Text className="text-xs font-semibold text-[#65605A] uppercase tracking-wider mb-2">Invite Code</Text>
             <TextInput
               value={inviteCode}
@@ -348,8 +324,12 @@ export default function RoomsScreen() {
           MY ROOMS
         </Text>
 
-        {loading ? (
-          <ActivityIndicator size="large" color="#E8C08A" className="mt-10" />
+        {showSkeleton ? (
+          <View className="space-y-3">
+            <RoomCardSkeleton />
+            <RoomCardSkeleton />
+            <RoomCardSkeleton />
+          </View>
         ) : rooms.length === 0 ? (
           <View className="bg-[#181513] border border-[#2B2521] p-8 rounded-2xl items-center mt-2">
             <Icon name="rooms" size={32} color="#E8C08A" className="mb-2" />
@@ -393,18 +373,27 @@ export default function RoomsScreen() {
         <View className="h-16" />
       </ScrollView>
 
+      {/* Create Room Modal */}
+      <CreateRoomModal
+        visible={showCreateModal}
+        userHabits={habits}
+        apiClient={apiClient}
+        onClose={() => setShowCreateModal(false)}
+        onRoomCreated={() => fetchRooms(apiClient)}
+      />
+
       {/* Pre-Join Habit Match Gate Modal */}
-      {gateInfo && (
+      {pendingGateRoom && (
         <HabitMatchGate
-          visible={!!gateInfo}
-          roomName={gateInfo.roomName}
-          trackedHabits={gateInfo.trackedHabits}
+          visible={!!pendingGateRoom}
+          roomName={pendingGateRoom.roomName}
+          trackedHabits={pendingGateRoom.trackedHabits}
           userHabits={habits}
           apiClient={apiClient}
-          onClose={() => setGateInfo(null)}
+          onClose={() => setPendingGateRoom(null)}
           onCompleteJoin={async () => {
-            await executeJoinRoom(gateInfo.inviteCode);
-            setGateInfo(null);
+            await executeJoinRoom(pendingGateRoom.inviteCode);
+            setPendingGateRoom(null);
           }}
         />
       )}

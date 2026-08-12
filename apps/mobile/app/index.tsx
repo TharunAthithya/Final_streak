@@ -1,9 +1,9 @@
 import React from 'react';
 import { Redirect } from 'expo-router';
-import { ActivityIndicator, View } from 'react-native';
+import { View } from 'react-native';
 
 import { useAuthStore } from '../src/store/auth-store';
-import { Colors } from '@streak/design-tokens';
+import { SkeletonBox } from '../src/components/ui/SkeletonBox';
 
 export default function Index() {
     const { token, loading } = useAuthStore();
@@ -15,10 +15,10 @@ export default function Index() {
                     flex: 1,
                     justifyContent: 'center',
                     alignItems: 'center',
-                    backgroundColor: Colors.background,
+                    backgroundColor: '#0B0B0C',
                 }}
             >
-                <ActivityIndicator />
+                <SkeletonBox width={120} height={36} borderRadius={12} />
             </View>
         );
     }

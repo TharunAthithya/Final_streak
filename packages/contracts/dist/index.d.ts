@@ -70,6 +70,7 @@ export interface HabitResponse {
         localDate: string;
         status?: string;
     }>;
+    daysOfWeek?: number[];
     freezeDaysAvailable: number;
     lastFreezeReset: string;
 }

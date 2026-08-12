@@ -6,12 +6,12 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
-  ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { Icon } from '../ui/Icon';
 import { StreakApiClient } from '@streak/api-client';
 import { HabitResponse, ScheduleType } from '@streak/contracts';
+import { DotPulse } from '../ui/DotPulse';
+import { useNotice } from '../ui/Notice';
 
 interface CreateRoomModalProps {
   visible: boolean;
@@ -34,6 +34,7 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
   onClose,
   onRoomCreated,
 }) => {
+  const notice = useNotice();
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
   // Step 1: Habits selection
@@ -45,19 +46,18 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
   const [searchResults, setSearchResults] = useState<SelectedUserItem[]>([]);
   const [invitedMembers, setInvitedMembers] = useState<SelectedUserItem[]>([]);
 
-  // Step 3: Room details
+  // Step 3: Room metadata & duration
   const [roomName, setRoomName] = useState('');
   const [goalDescription, setGoalDescription] = useState('');
-  const [durationType, setDurationType] = useState<'7_DAYS' | '14_DAYS' | '30_DAYS' | '60_DAYS' | 'CUSTOM' | 'PERMANENT'>('30_DAYS');
-  const [durationDays, setDurationDays] = useState<number | undefined>(30);
-  const [customDaysInput, setCustomDaysInput] = useState('45');
+  const [durationType, setDurationType] = useState<'WEEKLY' | 'MONTHLY' | 'CUSTOM' | 'PERMANENT'>('MONTHLY');
+  const [durationDays, setDurationDays] = useState(30);
+  const [customDaysInput, setCustomDaysInput] = useState('30');
   const [creating, setCreating] = useState(false);
 
   // Reset state when modal opens
   useEffect(() => {
     if (visible) {
       setStep(1);
-      // Pre-select creator habits by default if available
       const initialNames = userHabits.length > 0
         ? userHabits.map((h) => h.name)
         : [];
@@ -67,45 +67,38 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
       setInvitedMembers([]);
       setRoomName('');
       setGoalDescription('');
-      setDurationType('30_DAYS');
+      setDurationType('MONTHLY');
       setDurationDays(30);
-      setCustomDaysInput('45');
+      setCustomDaysInput('30');
     }
   }, [visible, userHabits]);
 
-  // Username search effect
+  // Debounced user search
   useEffect(() => {
-    const trimmed = usernameSearch.trim().replace(/^@/, '');
-    if (trimmed.length >= 2) {
-      setSearching(true);
-      const timer = setTimeout(async () => {
-        try {
-          const results = await apiClient.searchUsersByUsername(trimmed);
-          setSearchResults(
-            results.map((u: any) => ({
-              id: u.id,
-              username: u.username || 'user',
-              displayName: u.displayName || u.username || 'User',
-            }))
-          );
-        } catch (e) {
-          setSearchResults([]);
-        } finally {
-          setSearching(false);
-        }
-      }, 300);
-      return () => clearTimeout(timer);
-    } else {
+    if (!usernameSearch.trim() || usernameSearch.length < 2) {
       setSearchResults([]);
+      return;
     }
-  }, [usernameSearch]);
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const results = await apiClient.searchUsersByUsername(usernameSearch.trim());
+        setSearchResults(results);
+      } catch (e) {
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [usernameSearch, apiClient]);
 
-  const toggleHabitSelection = (habitName: string) => {
-    setSelectedHabitNames((prev) =>
-      prev.includes(habitName)
-        ? prev.filter((name) => name !== habitName)
-        : [...prev, habitName]
-    );
+  const toggleHabitSelection = (name: string) => {
+    if (selectedHabitNames.includes(name)) {
+      setSelectedHabitNames((prev) => prev.filter((n) => n !== name));
+    } else {
+      setSelectedHabitNames((prev) => [...prev, name]);
+    }
   };
 
   const addInvitedMember = (user: SelectedUserItem) => {
@@ -120,26 +113,28 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
     setInvitedMembers((prev) => prev.filter((m) => m.id !== userId));
   };
 
-  const handleSelectDurationOption = (type: '7_DAYS' | '14_DAYS' | '30_DAYS' | '60_DAYS' | 'CUSTOM' | 'PERMANENT', days?: number) => {
+  const handleSelectDurationType = (type: 'WEEKLY' | 'MONTHLY' | 'CUSTOM' | 'PERMANENT', days: number) => {
     setDurationType(type);
-    if (type === 'PERMANENT') {
-      setDurationDays(undefined);
-    } else if (type === 'CUSTOM') {
-      const parsed = parseInt(customDaysInput, 10);
-      setDurationDays(isNaN(parsed) ? 45 : parsed);
+    if (type === 'CUSTOM') {
+      setCustomDaysInput('30');
+      setDurationDays(30);
     } else {
       setDurationDays(days);
     }
   };
 
+  const handleSelectDurationOption = (type: any, days?: number) => {
+    if (days) setDurationDays(days);
+  };
+
   const handleCreateRoom = async () => {
     if (selectedHabitNames.length === 0) {
-      Alert.alert('Habits Required', 'You must select at least one personal habit for this room.');
+      notice.warning('You must select at least one personal habit for this room.');
       return;
     }
 
     if (!roomName.trim()) {
-      Alert.alert('Room Name Required', 'Please enter a name for your room.');
+      notice.warning('Please enter a name for your room.');
       return;
     }
 
@@ -148,7 +143,7 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
       if (durationType === 'CUSTOM') {
         const parsed = parseInt(customDaysInput, 10);
         if (isNaN(parsed) || parsed < 1 || parsed > 365) {
-          Alert.alert('Invalid Duration', 'Custom duration must be between 1 and 365 days.');
+          notice.warning('Custom duration must be between 1 and 365 days.');
           return;
         }
         finalDays = parsed;
@@ -172,16 +167,17 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
         name: roomName.trim(),
         description: goalDescription.trim() || undefined,
         visibility: 'PRIVATE',
-        durationType,
+        durationType: durationType as any,
         durationDays: finalDays,
         trackedHabits: trackedHabitsPayload,
         invitedUserIds: invitedMembers.map((m) => m.id),
       });
 
       onRoomCreated(newRoom);
+      notice.success(`Room "${roomName.trim()}" created successfully!`);
       onClose();
     } catch (e: any) {
-      Alert.alert('Creation Failed', e.message || 'Failed to create room.');
+      notice.error(e.message || 'Failed to create room.');
     } finally {
       setCreating(false);
     }
@@ -307,7 +303,7 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
                   className="flex-1 text-sm text-[#F5F2EC]"
                   autoCapitalize="none"
                 />
-                {searching && <ActivityIndicator size="small" color="#E8C08A" />}
+                {searching && <DotPulse color="#E8C08A" size={4} />}
               </View>
 
               {/* Search Results Dropdown */}
@@ -497,7 +493,7 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
               className="flex-1 py-3.5 bg-[#E8C08A] rounded-2xl justify-center items-center flex-row"
             >
               {creating ? (
-                <ActivityIndicator size="small" color="#241C14" />
+                <DotPulse color="#241C14" size={5} />
               ) : (
                 <Text className="text-sm font-bold text-[#241C14]">Create Room</Text>
               )}

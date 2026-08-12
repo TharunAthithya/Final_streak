@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   TouchableWithoutFeedback,
-  Alert,
 } from 'react-native';
 import { HabitResponse } from '@streak/contracts';
 import { Icon } from '../ui/Icon';
@@ -14,13 +13,14 @@ import { HabitStatsCard } from './HabitStatsCard';
 import { HabitContributionGraph } from './HabitContributionGraph';
 import { FreezeConfirmationCard } from './FreezeConfirmationCard';
 import { calculateGlobalStreak } from '../../utils/streak';
+import { useNotice } from '../ui/Notice';
 
 interface FreezeSheetProps {
   visible: boolean;
   habit: HabitResponse;
   availableCount: number;
   onClose: () => void;
-  onConfirmFreeze: (dateStr: string) => Promise<void>;
+  onConfirmFreeze: (targetDateStr: string) => Promise<void>;
 }
 
 export const FreezeSheet: React.FC<FreezeSheetProps> = ({
@@ -30,6 +30,7 @@ export const FreezeSheet: React.FC<FreezeSheetProps> = ({
   onClose,
   onConfirmFreeze,
 }) => {
+  const notice = useNotice();
   const [selectedMissedDate, setSelectedMissedDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -60,11 +61,12 @@ export const FreezeSheet: React.FC<FreezeSheetProps> = ({
     try {
       await onConfirmFreeze(selectedMissedDate);
       setSelectedMissedDate(null);
+      notice.success('Freeze applied successfully!');
       setTimeout(() => {
         onClose();
       }, 300);
     } catch (e: any) {
-      Alert.alert('Freeze Error', e.message || 'Failed to apply freeze');
+      notice.error(e.message || 'Failed to apply freeze');
     } finally {
       setLoading(false);
     }

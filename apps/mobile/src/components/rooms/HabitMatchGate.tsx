@@ -5,13 +5,13 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Alert,
 } from 'react-native';
 import { Icon } from '../ui/Icon';
 import { HabitResponse } from '@streak/contracts';
 import { CreateHabitBottomSheet } from '../habits/CreateHabitBottomSheet';
 import { useHabitStore } from '../../store/habit-store';
 import { StreakApiClient } from '@streak/api-client';
+import { useNotice } from '../ui/Notice';
 
 export interface RoomTrackedHabit {
   id?: string;
@@ -38,25 +38,22 @@ export const HabitMatchGate: React.FC<HabitMatchGateProps> = ({
   onClose,
   onCompleteJoin,
 }) => {
+  const notice = useNotice();
   const { createHabit, fetchHabits } = useHabitStore();
   const [creatingHabitName, setCreatingHabitName] = useState<string | null>(null);
   const [isJoining, setIsJoining] = useState(false);
 
   if (!visible) return null;
 
-  // Check which room habits the user currently owns
-  const userHabitNames = userHabits.map((h) => h.name.toLowerCase().trim());
-
-  const matchedStatus = trackedHabits.map((th) => {
-    const isMatched = userHabitNames.includes(th.name.toLowerCase().trim());
-    return {
-      ...th,
-      isMatched,
-    };
+  const matchedStatusList = trackedHabits.map((th) => {
+    const isMatched = userHabits.some(
+      (uh) => uh.name.toLowerCase().trim() === th.name.toLowerCase().trim()
+    );
+    return { habit: th, isMatched };
   });
 
-  const allMatched = matchedStatus.every((s) => s.isMatched);
-  const missingCount = matchedStatus.filter((s) => !s.isMatched).length;
+  const allMatched = matchedStatusList.every((item) => item.isMatched);
+  const missingCount = matchedStatusList.filter((s) => !s.isMatched).length;
 
   const handleCreateMissingHabit = async (habitData: {
     name: string;
@@ -65,8 +62,8 @@ export const HabitMatchGate: React.FC<HabitMatchGateProps> = ({
     scheduleType: 'DAILY' | 'SPECIFIC_DAYS';
     daysOfWeek?: number[];
   }) => {
+    const todayStr = new Date().toISOString().split('T')[0];
     try {
-      const todayStr = new Date().toISOString().split('T')[0];
       await createHabit(apiClient, {
         name: habitData.name.trim(),
         description: habitData.description?.trim() || undefined,
@@ -78,14 +75,15 @@ export const HabitMatchGate: React.FC<HabitMatchGateProps> = ({
       });
       await fetchHabits(apiClient);
       setCreatingHabitName(null);
+      notice.success(`Created "${habitData.name.trim()}"!`);
     } catch (e: any) {
-      Alert.alert('Habit Creation Error', e.message || 'Failed to create habit');
+      notice.error(e.message || 'Failed to create habit');
     }
   };
 
   const handleProceed = async () => {
     if (!allMatched) {
-      Alert.alert('Missing Habits', 'Please create all required habits before joining this room.');
+      notice.warning('Please create all required habits before joining this room.');
       return;
     }
     setIsJoining(true);
@@ -93,7 +91,7 @@ export const HabitMatchGate: React.FC<HabitMatchGateProps> = ({
       await onCompleteJoin();
       onClose();
     } catch (e: any) {
-      Alert.alert('Join Error', e.message || 'Failed to join room');
+      notice.error(e.message || 'Failed to join room');
     } finally {
       setIsJoining(false);
     }
@@ -131,11 +129,11 @@ export const HabitMatchGate: React.FC<HabitMatchGateProps> = ({
 
           {/* Checklist of Room Habits */}
           <ScrollView showsVerticalScrollIndicator={false} className="mb-4">
-            {matchedStatus.map((item, idx) => (
+            {matchedStatusList.map(({ habit: item, isMatched }, idx) => (
               <View
                 key={item.id || idx}
                 className={`p-4 rounded-2xl border mb-3 flex-row items-center justify-between ${
-                  item.isMatched
+                  isMatched
                     ? 'bg-[#181513] border-[#2E3B2F]'
                     : 'bg-[#1F1715] border-[#3B2521]'
                 }`}
@@ -143,13 +141,13 @@ export const HabitMatchGate: React.FC<HabitMatchGateProps> = ({
                 <View className="flex-row items-center flex-1 pr-3">
                   <View
                     className={`w-9 h-9 rounded-xl items-center justify-center mr-3 ${
-                      item.isMatched ? 'bg-[#1E2E20]' : 'bg-[#3A1E1A]'
+                      isMatched ? 'bg-[#1E2E20]' : 'bg-[#3A1E1A]'
                     }`}
                   >
                     <Icon
-                      name={item.isMatched ? 'check' : 'alert-circle'}
+                      name={isMatched ? 'check' : 'alert-circle'}
                       size={18}
-                      color={item.isMatched ? '#4ADE80' : '#F87171'}
+                      color={isMatched ? '#4ADE80' : '#F87171'}
                     />
                   </View>
 
@@ -157,15 +155,15 @@ export const HabitMatchGate: React.FC<HabitMatchGateProps> = ({
                     <Text className="text-sm font-bold text-[#F5F2EC]">{item.name}</Text>
                     <Text
                       className={`text-xs ${
-                        item.isMatched ? 'text-[#4ADE80]' : 'text-[#F87171]'
+                        isMatched ? 'text-[#4ADE80]' : 'text-[#F87171]'
                       }`}
                     >
-                      {item.isMatched ? '✓ Personal habit matched' : '✗ Habit missing from your list'}
+                      {isMatched ? '✓ Personal habit matched' : '✗ Habit missing from your list'}
                     </Text>
                   </View>
                 </View>
 
-                {!item.isMatched && (
+                {!isMatched && (
                   <TouchableOpacity
                     onPress={() => setCreatingHabitName(item.name)}
                     className="bg-[#E8C08A] px-3 py-1.5 rounded-xl flex-row items-center"

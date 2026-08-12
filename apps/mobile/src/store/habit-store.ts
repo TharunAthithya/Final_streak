@@ -56,7 +56,12 @@ export const useHabitStore = create<HabitState>((set, get) => ({
   error: null,
 
   fetchHabits: async (apiClient) => {
-    set({ loading: true, error: null });
+    const isFirstLoad = get().habits.length === 0;
+    if (isFirstLoad) {
+      set({ loading: true, error: null });
+    } else {
+      set({ error: null });
+    }
     try {
       const data = await apiClient.getHabits();
       set({ habits: data, loading: false });

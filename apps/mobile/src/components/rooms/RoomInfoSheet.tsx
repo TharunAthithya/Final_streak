@@ -5,12 +5,13 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Alert,
 } from 'react-native';
 import { Icon } from '../ui/Icon';
 import { Avatar } from './Avatar';
 import { MemberProfileSheet, RoomMemberDetail } from './MemberProfileSheet';
 import { StreakApiClient } from '@streak/api-client';
+import { useNotice } from '../ui/Notice';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 interface RoomMemberItem {
   id?: string;
@@ -33,7 +34,7 @@ interface RoomInfoSheetProps {
   roomId: string;
   isOwner?: boolean;
   onClose: () => void;
-  onOpenInviteModal: () => void;
+  onOpenInviteModal?: () => void;
   onLeaveRoom: () => Promise<void>;
   onDeleteRoom?: () => Promise<void>;
 }
@@ -41,7 +42,7 @@ interface RoomInfoSheetProps {
 export const RoomInfoSheet: React.FC<RoomInfoSheetProps> = ({
   visible,
   roomDetails,
-  members,
+  members = [],
   apiClient,
   roomId,
   isOwner = false,
@@ -50,15 +51,18 @@ export const RoomInfoSheet: React.FC<RoomInfoSheetProps> = ({
   onLeaveRoom,
   onDeleteRoom,
 }) => {
+  const notice = useNotice();
   const [selectedMember, setSelectedMember] = useState<RoomMemberDetail | null>(null);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const handleExtend = async (additionalDays: number) => {
     try {
       await apiClient.extendRoomDuration(roomId, additionalDays);
-      Alert.alert('Duration Extended', `Room extended by ${additionalDays} days!`);
+      notice.success(`Room extended by ${additionalDays} days!`);
       onClose();
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to extend room duration');
+      notice.error(e.message || 'Failed to extend room duration');
     }
   };
 
@@ -91,49 +95,27 @@ export const RoomInfoSheet: React.FC<RoomInfoSheetProps> = ({
 
   const trackedHabits = roomDetails.trackedHabits || roomDetails.roomHabits || [];
 
-  const handleConfirmLeave = () => {
-    Alert.alert(
-      'Leave Room',
-      'Are you sure you want to leave this room? You will no longer track habits with this group.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave Room',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              onClose();
-              await onLeaveRoom();
-            } catch (e: any) {
-              Alert.alert('Error', e.message || 'Failed to leave room');
-            }
-          },
-        },
-      ]
-    );
+  const handleConfirmLeave = async () => {
+    setShowLeaveConfirm(false);
+    try {
+      onClose();
+      await onLeaveRoom();
+      notice.success('Left room');
+    } catch (e: any) {
+      notice.error(e.message || 'Failed to leave room');
+    }
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!onDeleteRoom) return;
-    Alert.alert(
-      'Delete Room',
-      'Are you sure you want to delete this room? This action cannot be undone and will remove all members.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete Room',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              onClose();
-              await onDeleteRoom();
-            } catch (e: any) {
-              Alert.alert('Error', e.message || 'Failed to delete room');
-            }
-          },
-        },
-      ]
-    );
+    setShowDeleteConfirm(false);
+    try {
+      onClose();
+      await onDeleteRoom();
+      notice.success('Room deleted');
+    } catch (e: any) {
+      notice.error(e.message || 'Failed to delete room');
+    }
   };
 
   return (
@@ -297,7 +279,7 @@ export const RoomInfoSheet: React.FC<RoomInfoSheetProps> = ({
               <TouchableOpacity
                 onPress={() => {
                   onClose();
-                  onOpenInviteModal();
+                  onOpenInviteModal?.();
                 }}
                 className="w-full bg-[#E8C08A] py-3 rounded-xl items-center flex-row justify-center shadow-sm"
               >
@@ -371,7 +353,7 @@ export const RoomInfoSheet: React.FC<RoomInfoSheetProps> = ({
 
               {isOwner ? (
                 <TouchableOpacity
-                  onPress={handleConfirmDelete}
+                  onPress={() => setShowDeleteConfirm(true)}
                   className="w-full bg-[#E57373] py-3 rounded-xl items-center flex-row justify-center"
                 >
                   <Icon name="trash" size={15} color="#141110" className="mr-1.5" />
@@ -379,7 +361,7 @@ export const RoomInfoSheet: React.FC<RoomInfoSheetProps> = ({
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  onPress={handleConfirmLeave}
+                  onPress={() => setShowLeaveConfirm(true)}
                   className="w-full bg-[#E57373] py-3 rounded-xl items-center flex-row justify-center"
                 >
                   <Icon name="close" size={15} color="#141110" className="mr-1.5" />
@@ -389,14 +371,34 @@ export const RoomInfoSheet: React.FC<RoomInfoSheetProps> = ({
             </View>
           </ScrollView>
         </View>
+
+        {/* Member Profile Bottom Sheet */}
+        <MemberProfileSheet
+          visible={!!selectedMember}
+          member={selectedMember}
+          roomHabits={trackedHabits}
+          onClose={() => setSelectedMember(null)}
+        />
       </View>
 
-      {/* Member Profile Bottom Sheet */}
-      <MemberProfileSheet
-        visible={!!selectedMember}
-        member={selectedMember}
-        roomHabits={trackedHabits}
-        onClose={() => setSelectedMember(null)}
+      <ConfirmDialog
+        visible={showLeaveConfirm}
+        title="Leave Room"
+        message="Are you sure you want to leave this room? You will no longer track habits with this group."
+        confirmLabel="Leave Room"
+        destructive
+        onConfirm={handleConfirmLeave}
+        onCancel={() => setShowLeaveConfirm(false)}
+      />
+
+      <ConfirmDialog
+        visible={showDeleteConfirm}
+        title="Delete Room"
+        message="Are you sure you want to delete this room? This action cannot be undone and will remove all members."
+        confirmLabel="Delete Room"
+        destructive
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
       />
     </Modal>
   );

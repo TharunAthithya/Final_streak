@@ -1,11 +1,13 @@
 import '../global.css';
 
 import React, { useEffect } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { View } from 'react-native';
 import { Slot, useRouter, useSegments } from 'expo-router';
 
 import { useAuthStore } from '../src/store/auth-store';
 import { useSyncStore } from '../src/store/sync-store';
+import { NoticeProvider } from '../src/components/ui/Notice';
+import { SkeletonBox } from '../src/components/ui/SkeletonBox';
 
 import { Colors } from '@streak/design-tokens';
 
@@ -42,13 +44,17 @@ export default function RootLayout() {
           flex: 1,
           justifyContent: 'center',
           alignItems: 'center',
-          backgroundColor: Colors.background,
+          backgroundColor: '#0B0B0C',
         }}
       >
-        <ActivityIndicator />
+        <SkeletonBox width={120} height={36} borderRadius={12} />
       </View>
     );
   }
 
-  return <Slot />;
+  return (
+    <NoticeProvider>
+      <Slot />
+    </NoticeProvider>
+  );
 }

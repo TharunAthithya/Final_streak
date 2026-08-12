@@ -5,15 +5,21 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useAuthStore } from '../../src/store/auth-store';
 import { Icon } from '../../src/components/ui/Icon';
+import { ProfileSkeleton } from '../../src/components/ui/skeletons/ProfileSkeleton';
+import { DotPulse } from '../../src/components/ui/DotPulse';
+import { useNotice } from '../../src/components/ui/Notice';
+import { ConfirmDialog } from '../../src/components/ui/ConfirmDialog';
+import { useDelayedLoading } from '../../src/hooks/useDelayedLoading';
 
 export default function ProfileScreen() {
   const { user, loading, updateUser, signOut, deleteUserAccount } = useAuthStore();
+  const notice = useNotice();
+  const showSkeleton = useDelayedLoading(loading || !user);
   const [isEditing, setIsEditing] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Form State
   const [displayName, setDisplayName] = useState(user?.displayName || '');
@@ -22,45 +28,29 @@ export default function ProfileScreen() {
 
   const handleUpdate = async () => {
     if (!displayName.trim()) {
-      Alert.alert('Error', 'Display Name cannot be empty.');
+      notice.warning('Display Name cannot be empty.');
       return;
     }
     try {
       await updateUser(displayName.trim(), bio.trim(), timezone.trim());
       setIsEditing(false);
-      Alert.alert('Success', 'Profile updated successfully.');
+      notice.success('Profile updated successfully.');
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      notice.error(e.message || 'Failed to update profile');
     }
   };
 
-  const handleDelete = () => {
-    Alert.alert(
-      'Delete Account',
-      'This will permanently delete your account and all associated habits, streaks, and data. This action CANNOT be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete Permanently',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteUserAccount();
-            } catch (e: any) {
-              Alert.alert('Error', e.message);
-            }
-          },
-        },
-      ]
-    );
+  const handleConfirmDelete = async () => {
+    setShowDeleteConfirm(false);
+    try {
+      await deleteUserAccount();
+    } catch (e: any) {
+      notice.error(e.message || 'Failed to delete account');
+    }
   };
 
-  if (!user) {
-    return (
-      <View className="flex-1 items-center justify-center bg-[#0B0B0C]">
-        <ActivityIndicator size="large" color="#E8C08A" />
-      </View>
-    );
+  if (showSkeleton || !user) {
+    return <ProfileSkeleton />;
   }
 
   // Calculate level progress
@@ -143,7 +133,7 @@ export default function ProfileScreen() {
                 disabled={loading}
                 className="flex-1 bg-[#E8C08A] py-3 rounded-xl items-center mr-2"
               >
-                {loading ? <ActivityIndicator color="#241C14" /> : <Text className="text-[#241C14] font-bold text-sm">Save</Text>}
+                {loading ? <DotPulse color="#241C14" size={5} /> : <Text className="text-[#241C14] font-bold text-sm">Save</Text>}
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => setIsEditing(false)}
@@ -189,7 +179,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={handleDelete}
+            onPress={() => setShowDeleteConfirm(true)}
             className="py-3.5 flex-row justify-between items-center mt-1"
           >
             <Text className="text-sm text-[#E8899A] font-medium">Delete Account</Text>
@@ -197,6 +187,17 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Delete Account Confirmation Dialog */}
+      <ConfirmDialog
+        visible={showDeleteConfirm}
+        title="Delete Account"
+        message="This will permanently delete your account and all associated habits, streaks, and data. This action CANNOT be undone."
+        confirmLabel="Delete Permanently"
+        destructive
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </View>
   );
 }

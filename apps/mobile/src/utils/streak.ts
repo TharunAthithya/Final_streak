@@ -86,6 +86,34 @@ export function getHabitScheduleLabel(habit: HabitResponse): string {
 }
 
 /**
+ * Computes the short name of the next upcoming scheduled day after today for a habit (e.g., 'Thu', 'Sat').
+ */
+export function getNextScheduledDay(habit: HabitResponse, referenceDate: Date = new Date()): string {
+  const dayNamesShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const currentDayIndex = referenceDate.getDay();
+
+  if (habit.scheduleType === 'DAILY') {
+    const nextDayIndex = (currentDayIndex + 1) % 7;
+    return dayNamesShort[nextDayIndex];
+  }
+
+  if (habit.scheduleType === 'SPECIFIC_DAYS' && (habit as any).daysOfWeek && Array.isArray((habit as any).daysOfWeek)) {
+    const days: number[] = (habit as any).daysOfWeek;
+    if (days.length === 0) return 'None';
+
+    // Find the closest upcoming day in the next 1..7 days
+    for (let offset = 1; offset <= 7; offset++) {
+      const nextDayIndex = (currentDayIndex + offset) % 7;
+      if (days.includes(nextDayIndex)) {
+        return dayNamesShort[nextDayIndex];
+      }
+    }
+  }
+
+  return 'Next';
+}
+
+/**
  * Calculates the Daily Promise Progress for a specific calendar date.
  */
 export function calculateDailyPromiseProgress(

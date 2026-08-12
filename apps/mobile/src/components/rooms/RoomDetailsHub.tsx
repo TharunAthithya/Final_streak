@@ -4,8 +4,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { Icon } from '../ui/Icon';
 import { Avatar } from './Avatar';
@@ -13,6 +11,10 @@ import { MemberProfileSheet, RoomMemberDetail } from './MemberProfileSheet';
 import { RoomChatFeed, RoomFeedItem } from './RoomChatFeed';
 import { ReactionKind } from './ReactionPill';
 import { StreakApiClient } from '@streak/api-client';
+import { FeedItemSkeleton } from '../ui/skeletons/FeedItemSkeleton';
+import { DotPulse } from '../ui/DotPulse';
+import { useNotice } from '../ui/Notice';
+import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 
 interface RoomDetailsHubProps {
   roomDetails: any;
@@ -45,6 +47,8 @@ export const RoomDetailsHub: React.FC<RoomDetailsHubProps> = ({
   onToggleReaction,
   onQuickCompleteHabit,
 }) => {
+  const notice = useNotice();
+  const showSkeleton = useDelayedLoading(loadingDetails);
   const [selectedMember, setSelectedMember] = useState<RoomMemberDetail | null>(null);
   const [completingHabitName, setCompletingHabitName] = useState<string | null>(null);
 
@@ -79,12 +83,14 @@ export const RoomDetailsHub: React.FC<RoomDetailsHubProps> = ({
     if (!roomDetails) return [];
 
     const result: RoomFeedItem[] = [];
-    const originDateStr = roomDetails.created_at
-      ? new Date(roomDetails.created_at).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })
+
+    const originDateStr = roomDetails.createdAt || roomDetails.created_at
+      ? new Date(roomDetails.createdAt || roomDetails.created_at).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })
       : 'recently';
 
+    // System announcement item (Room created)
     result.push({
-      id: 'origin-marker',
+      id: `system-created-${roomDetails.id}`,
       kind: 'origin',
       label: `Room created · ${originDateStr}`,
     });
@@ -140,8 +146,9 @@ export const RoomDetailsHub: React.FC<RoomDetailsHubProps> = ({
     setCompletingHabitName(habitName);
     try {
       await onQuickCompleteHabit(habitName);
+      notice.success(`Completed ${habitName}!`);
     } catch (e: any) {
-      Alert.alert('Completion Failed', e.message || 'Failed to complete habit');
+      notice.error(e.message || 'Failed to complete habit');
     } finally {
       setCompletingHabitName(null);
     }
@@ -319,7 +326,7 @@ export const RoomDetailsHub: React.FC<RoomDetailsHubProps> = ({
                           className="flex-row items-center bg-[#E8C08A] px-3.5 py-1 rounded-full"
                         >
                           {completingHabitName === habit.name ? (
-                            <ActivityIndicator size="small" color="#241C14" />
+                            <DotPulse color="#241C14" size={4} />
                           ) : (
                             <Text className="text-[11px] font-bold text-[#241C14]">
                               ○ Complete
@@ -397,8 +404,13 @@ export const RoomDetailsHub: React.FC<RoomDetailsHubProps> = ({
             ACTIVITY
           </Text>
 
-          {loadingDetails ? (
-            <ActivityIndicator size="large" color="#E8C08A" className="py-6" />
+          {showSkeleton ? (
+            <View className="bg-[#181513] border border-[#2B2521] rounded-2xl p-3">
+              <FeedItemSkeleton />
+              <FeedItemSkeleton />
+              <FeedItemSkeleton />
+              <FeedItemSkeleton />
+            </View>
           ) : feedItems.length <= 1 ? (
             <View className="bg-[#181513] border border-[#2B2521] p-6 rounded-2xl items-center">
               <Icon name="feed" size={28} color="#65605A" className="mb-2" />
