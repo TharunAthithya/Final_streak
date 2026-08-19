@@ -185,6 +185,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signUp: async (email, pass, username, name) => {
     set({ loading: true, error: null });
     try {
+      // Purge any stale profile cache from a previous user session
+      await AsyncStorage.removeItem(PROFILE_CACHE_KEY);
+
       const { data, error } = await client.supabase.auth.signUp({
         email,
         password: pass,
@@ -198,7 +201,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       if (error) throw error;
       if (!data.session) {
-        throw new Error('Verification email sent! Please check your inbox.');
+        throw new Error('Account created, but no authenticated session was returned. Please try signing in.');
       }
 
       await client.supabase.auth.setSession({

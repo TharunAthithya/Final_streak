@@ -97,3 +97,30 @@ pnpm dev
 
 cd apps/mobile
 pnpm start -c
+
+-----------------------------------------------------
+
+
+So what do you actually change?
+Every day
+
+Nothing.
+
+Just run:
+
+pnpm dev
+
+You're automatically using the development environment.
+
+Every release
+Increase:
+version
+Increase:
+versionCode
+If there are database changes:
+supabase link --project-ref <production>
+supabase db push
+Build:
+eas build --platform android --profile production
+If you're going back to development work after releasing, relink the CLI to the development project:
+supabase link --project-ref <development>

@@ -24,6 +24,7 @@ export default function RegisterScreen() {
   const router = useRouter();
 
   const handleRegister = async () => {
+    if (loading) return;
     if (!name.trim() || !username.trim() || !email.trim() || !password.trim()) {
       setLocalError('Please fill in all fields.');
       return;

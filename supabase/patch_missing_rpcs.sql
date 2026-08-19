@@ -607,24 +607,29 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 
+ALTER TABLE public.rooms DROP CONSTRAINT IF EXISTS rooms_owner_id_fkey;
+ALTER TABLE public.rooms ADD CONSTRAINT rooms_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
 CREATE OR REPLACE FUNCTION public.delete_account(
   p_profile_id UUID
 )
 RETURNS BOOLEAN AS $$
+DECLARE
+  v_caller_id UUID;
 BEGIN
-  IF auth.uid() <> p_profile_id THEN
-    RAISE EXCEPTION 'Unauthorized';
+  v_caller_id := auth.uid();
+
+  IF v_caller_id IS NULL OR v_caller_id <> p_profile_id THEN
+    RAISE EXCEPTION 'Unauthorized: You can only delete your own account';
   END IF;
 
-  IF EXISTS (SELECT 1 FROM public.rooms WHERE owner_id = p_profile_id AND archived_at IS NULL) THEN
-    RAISE EXCEPTION 'Cannot delete account while owning active rooms. Delete or transfer rooms first';
-  END IF;
-
+  DELETE FROM public.rooms WHERE owner_id = p_profile_id;
   DELETE FROM public.profiles WHERE id = p_profile_id;
+  DELETE FROM auth.users WHERE id = p_profile_id;
 
-  RETURN true;
+  RETURN TRUE;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth;
 
 
 -- 7. Grant EXECUTE permissions to authenticated and service_role
