@@ -22,18 +22,21 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     version: '1.0.0',
     orientation: 'portrait',
     icon: './assets/icon.png',
-    userInterfaceStyle: 'light',
+    userInterfaceStyle: 'dark',
     platforms: ['android', 'ios'],
     ios: {
       supportsTablet: true,
       bundleIdentifier: bundleId,
+      infoPlist: {
+        UIViewControllerBasedStatusBarAppearance: false,
+      },
     },
     android: {
       package: bundleId,
       versionCode: 1,
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
-        backgroundColor: '#F8F9F7',
+        backgroundColor: '#0B0B0C',
       },
     },
     web: {
@@ -46,7 +49,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       [
         'expo-splash-screen',
         {
-          backgroundColor: '#F8F9F7',
+          backgroundColor: '#0B0B0C',
           image: './assets/splash.png',
           imageWidth: 200,
         },
@@ -57,7 +60,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       eas: {
-        projectId: "ffc79f2a-3b83-4fc3-adc6-df06fe41e544",
+        projectId: "4fd56e1f-a43e-4f85-8eba-37d5c191a4b0",
       },
     },
   };

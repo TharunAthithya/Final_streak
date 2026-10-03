@@ -9,6 +9,9 @@ import { useSyncStore } from '../src/store/sync-store';
 import { NoticeProvider } from '../src/components/ui/Notice';
 import { SkeletonBox } from '../src/components/ui/SkeletonBox';
 
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+
 import { Colors } from '@streak/design-tokens';
 
 export default function RootLayout() {
@@ -47,14 +50,18 @@ export default function RootLayout() {
           backgroundColor: '#0B0B0C',
         }}
       >
+        <StatusBar style="light" />
         <SkeletonBox width={120} height={36} borderRadius={12} />
       </View>
     );
   }
 
   return (
-    <NoticeProvider>
-      <Slot />
-    </NoticeProvider>
+    <SafeAreaProvider>
+      <StatusBar style="light" />
+      <NoticeProvider>
+        <Slot />
+      </NoticeProvider>
+    </SafeAreaProvider>
   );
 }

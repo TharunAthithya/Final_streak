@@ -1,8 +1,11 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Icon } from '../../src/components/ui/Icon';
 
 export default function TabsLayout() {
+  const isIos = Platform.OS === 'ios';
+
   return (
     <Tabs
       screenOptions={{
@@ -12,8 +15,8 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: '#0B0B0C',
           borderTopColor: '#2B2521',
-          height: 65,
-          paddingBottom: 10,
+          height: isIos ? 88 : 65,
+          paddingBottom: isIos ? 28 : 10,
           paddingTop: 10,
         },
       }}

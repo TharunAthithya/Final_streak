@@ -2,11 +2,14 @@
   "expo": {
     "extra": {
       "eas": {
-        "projectId": "5b140330-45f8-41d8-b4d2-2ec0e055c0b2"
+        "projectId": "4fd56e1f-a43e-4f85-8eba-37d5c191a4b0"
       }
     },
     "android": {
       "package": "streak.beta"
+    },
+    "ios": {
+      "bundleIdentifier": "com.streak.app"
     }
   }
 }

@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, ScrollView, SafeAreaView, StatusBar } from 'react-native';
+import { View, ScrollView, StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { SkeletonBox } from './SkeletonBox';
 
 interface ScreenProps {
@@ -21,8 +22,8 @@ export const Screen: React.FC<ScreenProps> = ({
   const InnerContainer = scrollable ? ScrollView : View;
 
   return (
-    <Container className="flex-1 bg-background">
-      <StatusBar barStyle="dark-content" backgroundColor="#F8F9F7" />
+    <Container className="flex-1 bg-[#0B0B0C]">
+      <StatusBar barStyle="light-content" backgroundColor="#0B0B0C" />
       {loading ? (
         <View className="flex-1 justify-center items-center px-6">
           <SkeletonBox width="80%" height={24} borderRadius={8} className="mb-4" />

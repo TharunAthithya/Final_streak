@@ -12,6 +12,7 @@ import { ONBOARDING_STEPS } from './onboarding-constants';
 import { OnboardingCoachmark } from './OnboardingCoachmark';
 import { OnboardingExitModal } from './OnboardingExitModal';
 import { calculateTutorialPosition } from './onboarding-positioning';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface OnboardingOverlayProps {
   modalLayer?: string;
@@ -23,6 +24,7 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({
   useNativeModal = true,
 }) => {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   const isActive = useOnboardingStore((s) => s.isActive);
@@ -57,7 +59,10 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({
   const targetRect = targetReg?.rect;
 
   const cardSize = { width: Math.min(320, windowWidth - 32), height: 180 };
-  const safeArea = { top: Platform.OS === 'ios' ? 44 : 32, bottom: 40 };
+  const safeArea = {
+    top: Math.max(insets.top, Platform.OS === 'ios' ? 44 : 32),
+    bottom: Math.max(insets.bottom, 40),
+  };
 
   const pos = calculateTutorialPosition(
     targetRect,
