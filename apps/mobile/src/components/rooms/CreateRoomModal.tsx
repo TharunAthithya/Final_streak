@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal,
   View,
@@ -12,6 +12,8 @@ import { StreakApiClient } from '@streak/api-client';
 import { HabitResponse, ScheduleType } from '@streak/contracts';
 import { DotPulse } from '../ui/DotPulse';
 import { useNotice } from '../ui/Notice';
+import { useOnboardingStore } from '../../store/onboarding-store';
+import { OnboardingLayer, useOnboardingLayerOpen } from '../../onboarding/OnboardingOverlay';
 
 interface CreateRoomModalProps {
   visible: boolean;
@@ -26,6 +28,14 @@ interface SelectedUserItem {
   username: string;
   displayName: string;
 }
+
+const TUTORIAL_WIZARD_STEP: Record<string, 1 | 2 | 3> = {
+  'rooms.cHabits': 1,
+  'rooms.cInvite': 2,
+  'rooms.cDuration': 3,
+  'rooms.cReview': 3,
+  'rooms.cSubmit': 3,
+};
 
 export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
   visible,
@@ -183,6 +193,38 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
     }
   };
 
+  // Tutorial integration (inert when the tutorial is not running)
+  useOnboardingLayerOpen('roomCreate', visible);
+  const obStepId = useOnboardingStore((st) => (st.isActive ? st.currentStepId : null));
+  const scrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    if (!visible || !obStepId) return;
+    const wizardStep = TUTORIAL_WIZARD_STEP[obStepId];
+    if (!wizardStep) return;
+    setStep(wizardStep);
+    const timer = setTimeout(() => {
+      if (obStepId === 'rooms.cReview' || obStepId === 'rooms.cSubmit') scrollRef.current?.scrollToEnd({ animated: true });
+      else scrollRef.current?.scrollTo({ y: 0, animated: true });
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [visible, obStepId]);
+
+  /** Keep the tutorial in sync when the user uses the wizard's own Next / Back buttons. */
+  const syncTutorialWithWizard = (from: number, to: number) => {
+    const ob = useOnboardingStore.getState();
+    if (!ob.isActive || !ob.currentStepId) return;
+    if (to > from) {
+      if (TUTORIAL_WIZARD_STEP[ob.currentStepId] === from && ob.currentStepId !== 'rooms.cSubmit') ob.next();
+    } else {
+      for (let i = 0; i < 6; i++) {
+        const cur = useOnboardingStore.getState().currentStepId;
+        if (!cur || TUTORIAL_WIZARD_STEP[cur] === undefined || TUTORIAL_WIZARD_STEP[cur] <= to) break;
+        useOnboardingStore.getState().previous();
+      }
+    }
+  };
+
   if (!visible) return null;
 
   return (
@@ -224,8 +266,11 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
           ))}
         </View>
 
+        {/* Tutorial card (in the layout flow, so it never covers the form) */}
+        <OnboardingLayer layer="roomCreate" mode="inline" />
+
         {/* Step Content */}
-        <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
+        <ScrollView ref={scrollRef} className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
           {step === 1 && (
             <View>
               <Text className="text-base font-bold text-[#F5F2EC] mb-1">
@@ -470,7 +515,10 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
         <View className="px-6 pb-10 pt-4 bg-[#141110] border-t border-[#2B2521] flex-row gap-3">
           {step > 1 && (
             <TouchableOpacity
-              onPress={() => setStep((s) => (s - 1) as any)}
+              onPress={() => {
+                setStep((s) => (s - 1) as any);
+                syncTutorialWithWizard(step, step - 1);
+              }}
               className="px-5 py-3.5 bg-[#181513] border border-[#2B2521] rounded-2xl justify-center items-center"
             >
               <Text className="text-sm font-semibold text-[#F5F2EC]">Back</Text>
@@ -479,7 +527,10 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
 
           {step < 3 ? (
             <TouchableOpacity
-              onPress={() => setStep((s) => (s + 1) as any)}
+              onPress={() => {
+                setStep((s) => (s + 1) as any);
+                syncTutorialWithWizard(step, step + 1);
+              }}
               className="flex-1 py-3.5 bg-[#E8C08A] rounded-2xl justify-center items-center"
             >
               <Text className="text-sm font-bold text-[#241C14]">

@@ -1,101 +1,67 @@
-export interface TargetRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+import { TargetRect } from './onboarding-types';
 
-export interface ScreenDimensions {
-  width: number;
-  height: number;
-}
-
-export interface SafeAreaInsets {
+export interface CardPlacement {
   top: number;
-  bottom: number;
-}
-
-export interface TutorialCardSize {
+  left: number;
   width: number;
-  height: number;
 }
 
-export interface CalculatedPosition {
-  x: number;
-  y: number;
-  placement: 'above' | 'below' | 'center';
+interface PlacementInput {
+  target?: TargetRect | null;
+  winWidth: number;
+  winHeight: number;
+  insetTop: number;
+  tabBarHeight: number;
+  keyboardHeight: number;
+  cardHeight: number;
 }
+
+const MARGIN = 16;
+const GAP = 18;
+export const MAX_CARD_WIDTH = 360;
 
 /**
- * Pure positioning utility for the non-blocking onboarding tutorial card.
- * Calculates optimal (x, y) coordinates to place the card near the target element
- * without overlapping or covering the target.
+ * Places a card above or below the target so it never covers it.
+ * Falls back to docking at the top/bottom edge of the usable area when the target
+ * is unmeasured, off-screen, or neither side has enough room.
  */
-export function calculateTutorialPosition(
-  targetRect: TargetRect | undefined,
-  cardSize: TutorialCardSize = { width: 320, height: 180 },
-  screenSize: ScreenDimensions,
-  safeArea: SafeAreaInsets = { top: 40, bottom: 40 }
-): CalculatedPosition {
-  const horizontalPadding = 16;
-  const targetMargin = 12;
+export function computeCardPlacement(p: PlacementInput): CardPlacement {
+  const width = Math.min(MAX_CARD_WIDTH, p.winWidth - MARGIN * 2);
+  const usableTop = p.insetTop + 8;
+  // Keep clear of the keyboard, or of the bottom tab bar when the keyboard is hidden.
+  const usableBottom = p.winHeight - (p.keyboardHeight > 0 ? p.keyboardHeight : p.tabBarHeight) - 8;
+  const centered = (p.winWidth - width) / 2;
 
-  // Horizontal Centering / Alignment
-  let x: number;
-  if (targetRect) {
-    // Align center of card with center of target
-    const targetCenterX = targetRect.x + targetRect.width / 2;
-    x = targetCenterX - cardSize.width / 2;
-  } else {
-    // Default to screen center
-    x = (screenSize.width - cardSize.width) / 2;
-  }
+  const dockTop: CardPlacement = { top: usableTop, left: centered, width };
+  const dockBottom: CardPlacement = {
+    top: Math.max(usableTop, usableBottom - p.cardHeight),
+    left: centered,
+    width,
+  };
 
-  // Clamp x strictly within screen boundaries
-  const maxX = screenSize.width - cardSize.width - horizontalPadding;
-  x = Math.max(horizontalPadding, Math.min(maxX, x));
+  const t = p.target;
+  if (!t || t.width <= 0 || t.height <= 0) return dockBottom;
 
-  // If no target rect is supplied, position in middle
-  if (!targetRect) {
-    const y = (screenSize.height - cardSize.height) / 2;
-    return { x, y, placement: 'center' };
-  }
+  const targetBottom = t.y + t.height;
+  const fullyOnScreen = t.y >= 0 && targetBottom <= p.winHeight && t.x + t.width > 0 && t.x < p.winWidth;
+  if (!fullyOnScreen) return dockBottom;
 
-  // Vertical Positioning Logic
-  const screenCenterY = screenSize.height / 2;
-  const isTargetInTopHalf = targetRect.y < screenCenterY;
+  const left = Math.min(Math.max(t.x + t.width / 2 - width / 2, MARGIN), p.winWidth - MARGIN - width);
+  const spaceAbove = t.y - GAP - usableTop;
+  const spaceBelow = usableBottom - (targetBottom + GAP);
+  const targetInLowerHalf = t.y + t.height / 2 > p.winHeight / 2;
 
-  let y: number;
-  let placement: 'above' | 'below' | 'center';
+  const above: CardPlacement = { top: t.y - GAP - p.cardHeight, left, width };
+  const below: CardPlacement = { top: targetBottom + GAP, left, width };
 
-  if (isTargetInTopHalf) {
-    // Place tutorial card BELOW target
-    y = targetRect.y + targetRect.height + targetMargin;
-    placement = 'below';
-  } else {
-    // Place tutorial card ABOVE target
-    y = targetRect.y - cardSize.height - targetMargin;
-    placement = 'above';
-  }
+  const preferred = targetInLowerHalf ? 'above' : 'below';
+  const fitsAbove = spaceAbove >= p.cardHeight;
+  const fitsBelow = spaceBelow >= p.cardHeight;
 
-  // Safe area clamping
-  const minY = safeArea.top + 16;
-  const maxY = screenSize.height - safeArea.bottom - cardSize.height - 16;
-
-  // Fallback: If placing above goes off top, place below instead
-  if (placement === 'above' && y < minY) {
-    y = targetRect.y + targetRect.height + targetMargin;
-    placement = 'below';
-  }
-
-  // Fallback: If placing below goes off bottom, place above instead
-  if (placement === 'below' && y > maxY) {
-    y = targetRect.y - cardSize.height - targetMargin;
-    placement = 'above';
-  }
-
-  // Final clamp
-  y = Math.max(minY, Math.min(maxY, y));
-
-  return { x, y, placement };
+  if (preferred === 'above' && fitsAbove) return above;
+  if (preferred === 'below' && fitsBelow) return below;
+  if (fitsAbove) return above;
+  if (fitsBelow) return below;
+  // No room on either side: use the edge opposite the target.
+  return targetInLowerHalf ? dockTop : dockBottom;
 }

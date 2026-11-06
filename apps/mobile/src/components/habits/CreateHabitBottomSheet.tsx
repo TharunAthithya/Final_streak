@@ -19,6 +19,10 @@ import { DotPulse } from '../ui/DotPulse';
 import { useNotice } from '../ui/Notice';
 
 import { HabitResponse } from '@streak/contracts';
+import { useOnboardingStore } from '../../store/onboarding-store';
+import { STEP_BY_ID } from '../../onboarding/onboarding-constants';
+import { OnboardingLayer, useOnboardingLayerOpen } from '../../onboarding/OnboardingOverlay';
+import { useSectionScroll } from '../../onboarding/useSectionScroll';
 
 interface CreateHabitBottomSheetProps {
   visible: boolean;
@@ -50,6 +54,19 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
   onUpdate,
 }) => {
   const notice = useNotice();
+
+  // Tutorial integration (inert when the tutorial is not running)
+  const obCompleteRaw = useOnboardingStore((s) => s.completeStep);
+  const obSetContext = useOnboardingStore((s) => s.setContext);
+  const obLayerActive = useOnboardingStore(
+    (s) => s.isActive && !!s.currentStepId && STEP_BY_ID[s.currentStepId]?.layer === 'habit'
+  );
+  const { scrollRef, setY, setBase } = useSectionScroll();
+  const obComplete = (event: Parameters<typeof obCompleteRaw>[0]) => {
+    if (!initialHabit) obCompleteRaw(event);
+  };
+  useOnboardingLayerOpen('habit', visible && !initialHabit);
+
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [selectedIcon, setSelectedIcon] = useState('target');
@@ -78,6 +95,10 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
       setNameError('');
     }
   }, [visible, initialHabit]);
+
+  useEffect(() => {
+    if (visible && !initialHabit) obSetContext({ scheduleType });
+  }, [visible, scheduleType, initialHabit]);
 
   // Group icons by category
   const groupedIcons = AVAILABLE_HABIT_ICONS.reduce<Record<string, typeof AVAILABLE_HABIT_ICONS>>((acc, icon) => {
@@ -113,11 +134,14 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
   }, [name, touchedName]);
 
   const toggleDaySelection = (dayIndex: number) => {
+    if (selectedDays.includes(dayIndex) && selectedDays.length === 1) {
+      notice.warning('At least one day must be scheduled.');
+      return;
+    }
+    obComplete('DAYS_SELECTED');
     setSelectedDays((prev) => {
       if (prev.includes(dayIndex)) {
         if (prev.length === 1) {
-          // Prevent zero selected weekdays
-          notice.warning('At least one day must be scheduled.');
           return prev;
         }
         return prev.filter((d) => d !== dayIndex);
@@ -213,7 +237,11 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
           className="w-full"
         >
           {/* Safe Area Wrapper for bottom sheet style */}
-          <View className="bg-[#141110] rounded-t-[28px] border-t border-[#2B2521] px-5 pt-3 pb-8 max-h-[85%]">
+          <View
+            className={`bg-[#141110] rounded-t-[28px] border-t border-[#2B2521] px-5 pt-3 pb-8 ${
+              obLayerActive ? 'max-h-[58%]' : 'max-h-[85%]'
+            }`}
+          >
             
             {/* Drag Handle */}
             <View className="w-12 h-1 bg-[#2B2521] rounded-full self-center mb-5" />
@@ -227,6 +255,7 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
             </TouchableOpacity>
 
             <ScrollView
+              ref={scrollRef}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ paddingBottom: 20 }}
@@ -282,10 +311,10 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
               </View>
 
               {/* Form Fields */}
-              <View className="space-y-4">
+              <View className="space-y-4" onLayout={(e) => setBase(e.nativeEvent.layout.y)}>
                 
                 {/* Habit Name */}
-                <View className="mb-4">
+                <View className="mb-4" onLayout={(e) => setY("h.name")(e.nativeEvent.layout.y)}>
                   <Text className="text-[11px] font-bold text-[#65605A] uppercase tracking-wider mb-2">
                     Habit Name
                   </Text>
@@ -294,6 +323,7 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
                     onChangeText={(val) => {
                       setName(val);
                       setTouchedName(true);
+                      if (val.trim().length > 0) obComplete('HABIT_NAME_ENTERED');
                     }}
                     placeholder="e.g. Meditate, Workout, Drink Water"
                     placeholderTextColor="#65605A"
@@ -321,7 +351,7 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
                 </View>
 
                 {/* Icon Picker Grid */}
-                <View className="mb-5">
+                <View className="mb-5" onLayout={(e) => setY("h.icon")(e.nativeEvent.layout.y)}>
                   <Text className="text-[11px] font-bold text-[#65605A] uppercase tracking-wider mb-3">
                     Choose Icon
                   </Text>
@@ -337,7 +367,10 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
                             return (
                               <TouchableOpacity
                                 key={iconItem.name}
-                                onPress={() => setSelectedIcon(iconItem.name)}
+                                onPress={() => {
+                                  setSelectedIcon(iconItem.name);
+                                  obComplete('HABIT_ICON_SELECTED');
+                                }}
                                 className={`w-[14%] aspect-square items-center justify-center m-[1.3%] rounded-xl ${
                                   isSelected ? 'bg-[#3A2E1F] border border-[#E8C08A]' : 'bg-[#221C16] border border-[#2B2521]/10'
                                 }`}
@@ -359,13 +392,18 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
                 </View>
 
                 {/* Schedule Segmented Control */}
-                <View className="mb-4">
+                <View className="mb-4" onLayout={(e) => setY("h.schedule")(e.nativeEvent.layout.y)}>
                   <Text className="text-[11px] font-bold text-[#65605A] uppercase tracking-wider mb-2">
                     Schedule
                   </Text>
                   <View className="flex-row bg-[#181513] p-1 border border-[#2B2521] rounded-xl">
                     <TouchableOpacity
-                      onPress={() => setScheduleType('DAILY')}
+                      onPress={() => {
+                        setScheduleType('DAILY');
+                        obSetContext({ scheduleType: 'DAILY' });
+                        obComplete('SCHEDULE_SELECTED');
+                        obComplete('DAYS_SELECTED');
+                      }}
                       className={`flex-1 py-3 items-center rounded-lg ${
                         scheduleType === 'DAILY' ? 'bg-[#E8C08A]' : 'bg-transparent'
                       }`}
@@ -379,7 +417,11 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      onPress={() => setScheduleType('SPECIFIC_DAYS')}
+                      onPress={() => {
+                        setScheduleType('SPECIFIC_DAYS');
+                        obSetContext({ scheduleType: 'SPECIFIC_DAYS' });
+                        obComplete('SCHEDULE_SELECTED');
+                      }}
                       className={`flex-1 py-3 items-center rounded-lg ${
                         scheduleType === 'SPECIFIC_DAYS' ? 'bg-[#E8C08A]' : 'bg-transparent'
                       }`}
@@ -397,7 +439,7 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
 
                 {/* Specific Days Circular Selectors */}
                 {scheduleType === 'SPECIFIC_DAYS' && (
-                  <View className="mb-4">
+                  <View className="mb-4" onLayout={(e) => setY("h.days")(e.nativeEvent.layout.y)}>
                     <Text className="text-[11px] font-bold text-[#65605A] uppercase tracking-wider mb-2">
                       Days of Week
                     </Text>
@@ -441,6 +483,7 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
                 {/* Action Button */}
                 <TouchableOpacity
                   onPress={handleCreate}
+                  onLayout={(e) => setY('h.submit')(e.nativeEvent.layout.y)}
                   disabled={!isFormValid || loading}
                   className={`w-full py-4 rounded-xl items-center justify-center ${
                     isFormValid && !loading ? 'bg-[#E8C08A]' : 'bg-[#3A2E1F]'
@@ -464,6 +507,9 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
+
+        {/* Tutorial card floats in the free area above the sheet */}
+        <OnboardingLayer layer="habit" mode="top" />
       </View>
     </Modal>
   );

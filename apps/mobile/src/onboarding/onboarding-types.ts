@@ -1,81 +1,71 @@
-export type OnboardingSection = 'LESSON' | 'TODAY' | 'HABIT' | 'ROOMS' | 'ROOM';
+export type OnboardingSection = 'LESSON' | 'TODAY' | 'HABIT' | 'ROOMS' | 'ROOM' | 'DONE';
 
-export type StepType = 'ACTION' | 'EXPLANATION' | 'OBSERVE';
+/** Where a step's card is rendered. 'root' = measured card on the tab screens; others live inside a modal. */
+export type OnboardingLayerId = 'root' | 'lesson' | 'habit' | 'roomCreate';
 
-export type OnboardingCompletionEvent =
+export type OnboardingScreen = 'today' | 'rooms';
+
+/** info = Next button; action = waits for a real app event; final = completion step. */
+export type StepKind = 'info' | 'action' | 'final';
+
+export type OnboardingEvent =
   | 'LESSON_OPENED'
-  | 'LESSON_STARTED'
-  | 'LESSON_COMPLETED'
   | 'LESSON_CLOSED'
   | 'HABIT_SHEET_OPENED'
   | 'HABIT_NAME_ENTERED'
   | 'HABIT_ICON_SELECTED'
   | 'SCHEDULE_SELECTED'
-  | 'SPECIFIC_DAYS_SELECTED'
+  | 'DAYS_SELECTED'
   | 'HABIT_CREATED'
   | 'ROOMS_OPENED'
   | 'CREATE_ROOM_OPENED'
-  | 'JOIN_ROOM_OPENED'
   | 'ROOM_CREATED'
-  | 'ROOM_OPENED'
-  | 'NEXT_EXPLANATION';
+  | 'ROOM_OPENED';
+
+export interface OnboardingContext {
+  hasHabits: boolean;
+  roomCount: number;
+  scheduleType: 'DAILY' | 'SPECIFIC_DAYS';
+  createdHabit: boolean;
+  createdRoomId: string | null;
+}
+
+export interface OnboardingStep {
+  id: string;
+  section: OnboardingSection;
+  layer: OnboardingLayerId;
+  screen?: OnboardingScreen;
+  target?: string;
+  kind: StepKind;
+  event?: OnboardingEvent;
+  label: string;
+  title: string;
+  body: string;
+  instruction?: string;
+  /** Copy used instead of title/body when the user already had habits (not created in the tutorial). */
+  altTitle?: string;
+  altBody?: string;
+  skipIf?: (ctx: OnboardingContext) => boolean;
+}
 
 export interface TargetRect {
   x: number;
   y: number;
   width: number;
   height: number;
-  borderRadius?: number;
 }
 
-export interface TargetRegistration {
-  id: string;
-  rect: TargetRect;
-  modalLayer?: string;
-}
+export type NavDirection = 'fwd' | 'back' | 'skip';
 
-export interface OnboardingStep {
-  id: string;
-  section: OnboardingSection;
-  targetId?: string;
-  modalLayer?: string;
-  route?: string;
-  title: string;
-  description: string;
-  stepType: StepType;
-  completionEvent?: OnboardingCompletionEvent;
-  canSkipSection?: boolean;
-  isOptional?: boolean;
-  isConditional?: boolean;
-  actionInstruction?: string;
-  actionText?: string;
-  hintText?: string;
-}
-
-export interface OnboardingState {
-  userId: string | null;
+export interface PersistedOnboarding {
   currentStepId: string | null;
-  currentSection: OnboardingSection | null;
-  isActive: boolean;
+  history: string[];
+  completedSteps: string[];
+  skippedSections: OnboardingSection[];
   isCompleted: boolean;
   isDismissed: boolean;
+  createdHabit: boolean;
+  createdRoomId: string | null;
   startedAt?: string;
   completedAt?: string;
-  skippedSections: OnboardingSection[];
-  stepHistory: string[];
-  targets: Record<string, TargetRegistration>;
-  activeModalLayer: string | null;
-  
-  startForUser: (userId: string, hasHabits?: boolean, hasRooms?: boolean) => void;
-  completeEvent: (event: OnboardingCompletionEvent) => void;
-  next: () => void;
-  previous: () => void;
-  goToStep: (stepId: string) => void;
-  skipSection: () => void;
-  exit: () => void;
-  complete: () => void;
-  resetForUser: (userId: string) => void;
-  registerTarget: (registration: TargetRegistration) => void;
-  unregisterTarget: (id: string) => void;
-  setActiveModalLayer: (layer: string | null) => void;
 }

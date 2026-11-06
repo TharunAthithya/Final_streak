@@ -36,6 +36,8 @@ import { isHabitScheduledForDate, getHabitScheduleLabel, getNextScheduledDay, ge
 import { Icon } from '../../src/components/ui/Icon';
 import { calculateCalendarGridStatuses, getCalendarGridDates, validateFreeze } from '../../src/utils/freeze';
 import { resolveHabitIcon } from '../../src/utils/habit-icons';
+import { useOnboardingStore } from '../../src/store/onboarding-store';
+import { OnboardingTarget } from '../../src/onboarding/OnboardingTarget';
 
 export default function TodayScreen() {
   const { apiClient, user } = useAuthStore();
@@ -77,11 +79,24 @@ export default function TodayScreen() {
     setShowDailyStoryModal(false);
   };
 
+  // Tutorial hooks: report real app events and data context (no-ops when the tutorial is inactive)
+  const obComplete = useOnboardingStore((s) => s.completeStep);
+  const obSetContext = useOnboardingStore((s) => s.setContext);
+  const obMarkHabitCreated = useOnboardingStore((s) => s.markHabitCreated);
+  const obStepId = useOnboardingStore((s) => (s.isActive ? s.currentStepId : null));
+  const obNavDirection = useOnboardingStore((s) => s.navDirection);
+  const obNext = useOnboardingStore((s) => s.next);
+  const obPrevious = useOnboardingStore((s) => s.previous);
+
   // See all habits modal state
   const [showAllHabits, setShowAllHabits] = useState(false);
 
   // Habit creation form state
   const [showCreate, setShowCreate] = useState(false);
+
+  useEffect(() => {
+    if (!loading) obSetContext({ hasHabits: habits.length > 0 });
+  }, [loading, habits.length]);
 
   useEffect(() => {
     fetchHabits(apiClient);
@@ -92,6 +107,36 @@ export default function TodayScreen() {
       setShowDailyStoryModal(true);
     }
   }, []);
+
+  // Tutorial: modal visibility -> events (state driven, so they cannot be missed or double counted)
+  useEffect(() => {
+    if (showDailyStoryModal) {
+      obComplete('LESSON_OPENED');
+    } else if (obStepId === 'lesson.inside') {
+      // Lesson closed before the user pressed Next: move on so the card is never lost
+      obNext();
+    } else {
+      obComplete('LESSON_CLOSED');
+    }
+  }, [showDailyStoryModal, obStepId]);
+
+  useEffect(() => {
+    if (showCreate) obComplete('HABIT_SHEET_OPENED');
+  }, [showCreate, obStepId]);
+
+  // Tutorial: moving back/skipping from a modal step to a root step closes the modal that step belongs to
+  useEffect(() => {
+    if (!obStepId || obNavDirection === 'fwd') return;
+    if (obStepId !== 'lesson.inside' && obStepId !== 'lesson.close') setShowDailyStoryModal(false);
+    if (!obStepId.startsWith('habit.') || obStepId === 'habit.fab' || obStepId === 'habit.new') setShowCreate(false);
+  }, [obStepId]);
+
+  // Tutorial: the habit sheet was dismissed mid-flow -> step back to the "+" step
+  useEffect(() => {
+    if (!showCreate && obStepId && obStepId.startsWith('habit.') && obStepId !== 'habit.fab' && obStepId !== 'habit.new') {
+      obPrevious();
+    }
+  }, [showCreate, obStepId]);
 
   // Network listener & AppState listener for offline detection
   useEffect(() => {
@@ -233,6 +278,7 @@ export default function TodayScreen() {
         timezone: user?.timezone || 'UTC',
         startDate: toLocalDateString(new Date()),
       });
+      obMarkHabitCreated();
       setShowCreate(false);
       notice.success('Habit created successfully!');
     } catch (e: any) {
@@ -333,16 +379,16 @@ export default function TodayScreen() {
         </View>
 
         {/* Before You Begin Card (Stays visible all day, transitioning from Active to Reassuring Completed state) */}
-        <View className="px-6">
+        <OnboardingTarget id="lesson" className="px-6">
           <BeforeYouBeginCard
             isCompleted={isStoryCompletedToday}
             onPressBegin={() => setShowDailyStoryModal(true)}
           />
-        </View>
+        </OnboardingTarget>
 
         {/* Today's Promise Card Section */}
         <View className="px-6 mb-8">
-          <View className="bg-[#181513] border border-[#2B2521] rounded-3xl p-6 flex-row justify-between items-center">
+          <OnboardingTarget id="promise" className="bg-[#181513] border border-[#2B2521] rounded-3xl p-6 flex-row justify-between items-center">
             <View className="flex-1 pr-4">
               <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-3">
                 Today's Promise
@@ -354,14 +400,16 @@ export default function TodayScreen() {
               <Text className="text-xs text-[#9C958C] mb-4">
                 {remainingPromises > 0 ? `${remainingPromises} promises remaining today` : 'All promises kept today!'}
               </Text>
-              <View className="flex-row items-center">
+              <OnboardingTarget id="streak" className="flex-row items-center self-start">
                 <Icon name="streak" size={14} color="#E8C08A" className="mr-1.5" />
                 <Text className="text-xs text-[#E8C08A] font-semibold">{globalStreak}-day streak</Text>
-              </View>
+              </OnboardingTarget>
             </View>
             {/* Progress ring */}
-            <ProgressRing percentage={percentageDone} size={100} strokeWidth={8} />
-          </View>
+            <OnboardingTarget id="ring">
+              <ProgressRing percentage={percentageDone} size={100} strokeWidth={8} />
+            </OnboardingTarget>
+          </OnboardingTarget>
         </View>
 
         {/* Habits Header */}
@@ -395,12 +443,12 @@ export default function TodayScreen() {
           ) : (
             <>
               {/* Today's Habits List */}
-              {todayHabits.map((habit) => {
+              {todayHabits.map((habit, habitIndex) => {
                 const gridDates = getCalendarGridDates();
                 const freezableDates = gridDates.filter((d) => validateFreeze(habit, d).valid);
                 return (
+                  <OnboardingTarget key={habit.id} id={habitIndex === 0 ? 'firstHabit' : `habit.${habit.id}`}>
                   <HabitCard
-                    key={habit.id}
                     name={habit.name}
                     iconName={habit.icon}
                     reminderTime={habit.reminderTime}
@@ -415,6 +463,7 @@ export default function TodayScreen() {
                     onFreeze={(date) => handleFreezeHabit(habit.id, date)}
                     onCardPress={() => setSelectedHabitForDetail(habit)}
                   />
+                  </OnboardingTarget>
                 );
               })}
 
@@ -533,12 +582,14 @@ export default function TodayScreen() {
       />
 
       {/* FAB Plus Button */}
-      <TouchableOpacity
-        onPress={() => setShowCreate(!showCreate)}
-        className="absolute bottom-6 right-6 w-14 h-14 bg-[#E8C08A] rounded-full justify-center items-center shadow-lg"
-      >
-        <Icon name="plus" size={28} color="#241C14" />
-      </TouchableOpacity>
+      <OnboardingTarget id="fab" className="absolute bottom-6 right-6">
+        <TouchableOpacity
+          onPress={() => setShowCreate(!showCreate)}
+          className="w-14 h-14 bg-[#E8C08A] rounded-full justify-center items-center shadow-lg"
+        >
+          <Icon name="plus" size={28} color="#241C14" />
+        </TouchableOpacity>
+      </OnboardingTarget>
     </View>
   );
 }

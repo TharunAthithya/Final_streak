@@ -10,6 +10,7 @@ import {
 import { DailyStory } from '../../data/daily-stories';
 import { Icon } from '../ui/Icon';
 import { SlideToBegin } from './SlideToBegin';
+import { OnboardingLayer, useOnboardingLayerOpen } from '../../onboarding/OnboardingOverlay';
 import { useDailyStoryStore } from '../../store/daily-story-store';
 import { toLocalDateString } from '../../utils/streak';
 
@@ -63,6 +64,8 @@ export const DailyStoryModal: React.FC<DailyStoryModalProps> = ({
     }
   }, [visible, todayStr]);
 
+  useOnboardingLayerOpen('lesson', visible);
+
   if (!visible) return null;
 
   const handleSlideComplete = async () => {
@@ -93,7 +96,7 @@ export const DailyStoryModal: React.FC<DailyStoryModalProps> = ({
             className="flex-1 px-8 pt-16 pb-12 justify-between"
           >
             {/* Header / Subtitle */}
-            <View>
+            <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
               <View className="flex-row justify-between items-center mb-8">
                 <View>
                   <Text className="text-xs font-bold text-[#65605A] uppercase tracking-[2px]">
@@ -136,10 +139,11 @@ export const DailyStoryModal: React.FC<DailyStoryModalProps> = ({
               <Text className="text-base italic font-semibold text-[#E8C08A] leading-relaxed">
                 Begin with one action. The rest will follow.
               </Text>
-            </View>
+            </ScrollView>
 
             {/* Bottom Slider or Direct Read Action */}
             <View className="w-full pt-4">
+              <OnboardingLayer layer="lesson" mode="inline" />
               <SlideToBegin
                 onSlideComplete={handleSlideComplete}
                 label={isReadonly ? 'Slide to view lesson' : 'Slide to begin'}
@@ -233,6 +237,8 @@ export const DailyStoryModal: React.FC<DailyStoryModalProps> = ({
                 </Text>
               </View>
             </ScrollView>
+
+            <OnboardingLayer layer="lesson" mode="inline" />
 
             {/* Sticky Bottom Action Bar */}
             <View className="px-6 pb-10 pt-4 bg-[#141110] border-t border-[#2B2521]">

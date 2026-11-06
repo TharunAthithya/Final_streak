@@ -15,6 +15,8 @@ import { FeedItemSkeleton } from '../ui/skeletons/FeedItemSkeleton';
 import { DotPulse } from '../ui/DotPulse';
 import { useNotice } from '../ui/Notice';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
+import { OnboardingTarget } from '../../onboarding/OnboardingTarget';
+import { useSectionScroll } from '../../onboarding/useSectionScroll';
 
 interface RoomDetailsHubProps {
   roomDetails: any;
@@ -154,6 +156,8 @@ export const RoomDetailsHub: React.FC<RoomDetailsHubProps> = ({
     }
   };
 
+  const { scrollRef, setY } = useSectionScroll();
+
   const getJoinedAgoText = (isoStr?: string) => {
     if (!isoStr) return 'Joined recently';
     const joinedDate = new Date(isoStr);
@@ -185,11 +189,11 @@ export const RoomDetailsHub: React.FC<RoomDetailsHubProps> = ({
         </TouchableOpacity>
       </View>
 
-      <ScrollView className="flex-1 px-6 pt-5" showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} className="flex-1 px-6 pt-5" showsVerticalScrollIndicator={false}>
 
 
         {/* CARD 3 — TODAY'S PROGRESS (Personal Room Progress) */}
-        <View className="bg-[#181513] border border-[#2B2521] p-5 rounded-2xl mb-5">
+        <OnboardingTarget id="roomProgress" radius={16} onLayoutY={setY('roomProgress')} className="bg-[#181513] border border-[#2B2521] p-5 rounded-2xl mb-5">
           <View className="flex-row items-center justify-between mb-2">
             <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest">
               TODAY'S PROGRESS
@@ -271,10 +275,10 @@ export const RoomDetailsHub: React.FC<RoomDetailsHubProps> = ({
               })}
             </View>
           )}
-        </View>
+        </OnboardingTarget>
 
         {/* CARD 4 — 🤝 SHARED HABITS */}
-        <View className="mb-5">
+        <OnboardingTarget id="roomShared" radius={16} onLayoutY={setY('roomShared')} className="mb-5">
           <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-3">
             SHARED HABITS ({trackedHabits.length})
           </Text>
@@ -396,10 +400,10 @@ export const RoomDetailsHub: React.FC<RoomDetailsHubProps> = ({
               );
             })
           )}
-        </View>
+        </OnboardingTarget>
 
         {/* CARD 5 — ⚡ ACTIVITY FEED */}
-        <View className="mb-10">
+        <OnboardingTarget id="roomActivity" radius={16} onLayoutY={setY('roomActivity')} className="mb-10">
           <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-3">
             ACTIVITY
           </Text>
@@ -424,7 +428,7 @@ export const RoomDetailsHub: React.FC<RoomDetailsHubProps> = ({
               <RoomChatFeed items={feedItems} onToggleReaction={onToggleReaction} />
             </View>
           )}
-        </View>
+        </OnboardingTarget>
       </ScrollView>
 
       {/* Member Profile Bottom Sheet */}

@@ -1,6 +1,28 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
+import { View } from 'react-native';
 import { Icon } from '../../src/components/ui/Icon';
+import { useCurrentStep } from '../../src/store/onboarding-store';
+
+/** Rooms tab icon; gets the tutorial's gold ring while the tutorial points at the Rooms tab. */
+const RoomsTabIcon = ({ color }: { color: string }) => {
+  const step = useCurrentStep();
+  const highlighted = step?.target === 'tabRooms';
+  return (
+    <View
+      style={{
+        padding: 6,
+        margin: -6,
+        borderRadius: 18,
+        borderWidth: 1.5,
+        borderColor: highlighted ? '#E8C08A' : 'transparent',
+        backgroundColor: highlighted ? 'rgba(232,192,138,0.10)' : 'transparent',
+      }}
+    >
+      <Icon name="rooms" size={20} color={color} />
+    </View>
+  );
+};
 
 export default function TabsLayout() {
   return (
@@ -29,7 +51,7 @@ export default function TabsLayout() {
         name="rooms"
         options={{
           title: 'Rooms',
-          tabBarIcon: ({ color }) => <Icon name="rooms" size={20} color={color as string} />,
+          tabBarIcon: ({ color }) => <RoomsTabIcon color={color as string} />,
         }}
       />
       <Tabs.Screen

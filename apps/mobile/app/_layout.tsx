@@ -8,6 +8,7 @@ import { useAuthStore } from '../src/store/auth-store';
 import { useSyncStore } from '../src/store/sync-store';
 import { NoticeProvider } from '../src/components/ui/Notice';
 import { SkeletonBox } from '../src/components/ui/SkeletonBox';
+import { OnboardingHost } from '../src/onboarding/OnboardingOverlay';
 
 import { Colors } from '@streak/design-tokens';
 
@@ -55,6 +56,7 @@ export default function RootLayout() {
   return (
     <NoticeProvider>
       <Slot />
+      <OnboardingHost />
     </NoticeProvider>
   );
 }

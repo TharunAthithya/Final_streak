@@ -17,6 +17,9 @@ import { InviteMemberModal } from '../../src/components/rooms/InviteMemberModal'
 import { CreateRoomModal } from '../../src/components/rooms/CreateRoomModal';
 import { RoomDetailsHub } from '../../src/components/rooms/RoomDetailsHub';
 import { ReactionKind } from '../../src/components/rooms/ReactionPill';
+import { useOnboardingStore } from '../../src/store/onboarding-store';
+import { STEP_BY_ID } from '../../src/onboarding/onboarding-constants';
+import { OnboardingTarget } from '../../src/onboarding/OnboardingTarget';
 import { HabitMatchGate } from '../../src/components/rooms/HabitMatchGate';
 import { toLocalDateString } from '../../src/utils/streak';
 import { RoomCardSkeleton } from '../../src/components/ui/skeletons/RoomCardSkeleton';
@@ -54,6 +57,7 @@ export default function RoomsScreen() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
+  const [screenFocused, setScreenFocused] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
 
   // Habit matching gate state
@@ -69,7 +73,9 @@ export default function RoomsScreen() {
     useCallback(() => {
       fetchRooms(apiClient);
       fetchHabits(apiClient);
+      setScreenFocused(true);
       return () => {
+        setScreenFocused(false);
         setSelectedRoomId(null);
         setShowInfoSheet(false);
         setShowInviteModal(false);
@@ -107,6 +113,49 @@ export default function RoomsScreen() {
       };
     }
   }, [selectedRoomId, apiClient]);
+
+  // ── Tutorial integration (inert when the tutorial is not running) ──
+  const obComplete = useOnboardingStore((s) => s.completeStep);
+  const obSetContext = useOnboardingStore((s) => s.setContext);
+  const obMarkRoomCreated = useOnboardingStore((s) => s.markRoomCreated);
+  const obPrevious = useOnboardingStore((s) => s.previous);
+  const obStepId = useOnboardingStore((s) => (s.isActive ? s.currentStepId : null));
+  const obNavDirection = useOnboardingStore((s) => s.navDirection);
+  const obCreatedRoomId = useOnboardingStore((s) => s.ctx.createdRoomId);
+
+  useEffect(() => {
+    if (!loading) obSetContext({ roomCount: rooms.length });
+  }, [loading, rooms.length]);
+
+  useEffect(() => {
+    if (screenFocused) obComplete('ROOMS_OPENED');
+  }, [screenFocused, obStepId]);
+
+  useEffect(() => {
+    if (showCreateModal) obComplete('CREATE_ROOM_OPENED');
+  }, [showCreateModal, obStepId]);
+
+  useEffect(() => {
+    if (!selectedRoomId) return;
+    if (!obCreatedRoomId || obCreatedRoomId === 'created' || obCreatedRoomId === selectedRoomId) {
+      obComplete('ROOM_OPENED');
+    }
+  }, [selectedRoomId, obStepId]);
+
+  // Going back or skipping to a list-level step: close the create modal / room details first
+  useEffect(() => {
+    if (!obStepId || obNavDirection === 'fwd') return;
+    if (STEP_BY_ID[obStepId]?.layer !== 'roomCreate') setShowCreateModal(false);
+    if (obStepId.startsWith('rooms.') || obStepId === 'room.card') setSelectedRoomId(null);
+  }, [obStepId]);
+
+  // Create-room modal dismissed mid-tutorial -> step back to "Create Room"
+  useEffect(() => {
+    if (!showCreateModal && obStepId && STEP_BY_ID[obStepId]?.layer === 'roomCreate') obPrevious();
+  }, [showCreateModal, obStepId]);
+
+  const roomCardTargetId =
+    obCreatedRoomId && rooms.some((r) => r.id === obCreatedRoomId) ? obCreatedRoomId : rooms[0]?.id;
 
   const handleJoinRoom = async () => {
     if (!inviteCode.trim()) return;
@@ -275,7 +324,7 @@ export default function RoomsScreen() {
         </View>
 
         {/* Action Buttons */}
-        <View className="flex-row mb-8">
+        <OnboardingTarget id="actionRow" radius={14} className="flex-row mb-8">
           <TouchableOpacity
             onPress={() => {
               setShowCreateModal(true);
@@ -296,7 +345,7 @@ export default function RoomsScreen() {
             <Icon name="users" size={16} color="#E8C08A" className="mr-1.5" />
             <Text className="text-[#E8C08A] font-bold text-sm">Join Room</Text>
           </TouchableOpacity>
-        </View>
+        </OnboardingTarget>
 
         {/* Join Room Form */}
         {showJoin && (
@@ -338,8 +387,8 @@ export default function RoomsScreen() {
           </View>
         ) : (
           rooms.map((room) => (
+            <OnboardingTarget key={room.id} radius={18} id={room.id === roomCardTargetId ? 'roomCard' : `room.${room.id}`}>
             <TouchableOpacity
-              key={room.id}
               onPress={() => {
                 setOptimisticRoom(room);
                 setSelectedRoomId(room.id);
@@ -367,6 +416,7 @@ export default function RoomsScreen() {
               </View>
               <Icon name="chevron-right" size={20} color="#65605A" />
             </TouchableOpacity>
+            </OnboardingTarget>
           ))
         )}
 
@@ -379,7 +429,10 @@ export default function RoomsScreen() {
         userHabits={habits}
         apiClient={apiClient}
         onClose={() => setShowCreateModal(false)}
-        onRoomCreated={() => fetchRooms(apiClient)}
+        onRoomCreated={(newRoom: any) => {
+          fetchRooms(apiClient);
+          obMarkRoomCreated(newRoom?.id ?? null);
+        }}
       />
 
       {/* Pre-Join Habit Match Gate Modal */}

@@ -1,128 +1,62 @@
-import React, { useRef, useEffect, useCallback } from 'react';
-import { View, StyleProp, ViewStyle, LayoutChangeEvent } from 'react-native';
+import React, { useCallback, useEffect, useRef } from 'react';
+import { View, StyleProp, ViewStyle } from 'react-native';
 import { useOnboardingStore } from '../store/onboarding-store';
-import { ONBOARDING_STEPS } from './onboarding-constants';
+import { STEP_BY_ID } from './onboarding-constants';
 
 interface OnboardingTargetProps {
   id: string;
-  modalLayer?: string;
-  borderRadius?: number;
+  /** Reports the view's y inside its parent (used to scroll a section into view). */
+  onLayoutY?: (y: number) => void;
   style?: StyleProp<ViewStyle>;
   className?: string;
   children: React.ReactNode;
 }
 
-export const OnboardingTarget: React.FC<OnboardingTargetProps> = ({
-  id,
-  modalLayer,
-  borderRadius = 16,
-  style,
-  className,
-  children,
-}) => {
+/**
+ * Measures its children's window position so the tutorial card can sit next to them.
+ * Measures only while it is the active step's target. It adds no visual treatment.
+ */
+export const OnboardingTarget: React.FC<OnboardingTargetProps> = ({ id, onLayoutY, style, className, children }) => {
   const viewRef = useRef<View>(null);
-  const registerTarget = useOnboardingStore((s) => s.registerTarget);
-  const unregisterTarget = useOnboardingStore((s) => s.unregisterTarget);
-  const currentStepId = useOnboardingStore((s) => s.currentStepId);
-  const isActive = useOnboardingStore((s) => s.isActive);
-  const lastRectRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+  const lastKey = useRef('');
+  const setTarget = useOnboardingStore((s) => s.setTarget);
+  const isCurrent = useOnboardingStore(
+    (s) => s.isActive && !!s.currentStepId && STEP_BY_ID[s.currentStepId]?.target === id
+  );
 
-  const measureAndRegister = useCallback(() => {
-    if (!viewRef.current) return;
-
-    const recordMeasurement = (x: number, y: number, width: number, height: number) => {
-      if (width <= 0 || height <= 0) return;
-
-      const prev = lastRectRef.current;
-      // Update store only if coordinates actually changed by more than 0.5px
-      if (
-        !prev ||
-        Math.abs(prev.x - x) > 0.5 ||
-        Math.abs(prev.y - y) > 0.5 ||
-        Math.abs(prev.width - width) > 0.5 ||
-        Math.abs(prev.height - height) > 0.5
-      ) {
-        lastRectRef.current = { x, y, width, height };
-        registerTarget({
-          id,
-          modalLayer,
-          rect: {
-            x,
-            y,
-            width,
-            height,
-            borderRadius,
-          },
-        });
-      }
-    };
-
-    // Primary: measureInWindow for window-level absolute screen coordinates
-    viewRef.current.measureInWindow((x, y, width, height) => {
-      if (width > 0 && height > 0) {
-        recordMeasurement(x, y, width, height);
-      } else {
-        // Fallback: measure relative to root page
-        viewRef.current?.measure((_x, _y, w, h, pageX, pageY) => {
-          if (w > 0 && h > 0) {
-            recordMeasurement(pageX, pageY, w, h);
-          }
-        });
-      }
+  const measure = useCallback(() => {
+    viewRef.current?.measureInWindow((x, y, width, height) => {
+      if (!(width > 0) || !(height > 0)) return;
+      const key = [x, y, width, height].map(Math.round).join(',');
+      if (key === lastKey.current) return;
+      lastKey.current = key;
+      setTarget(id, { x, y, width, height });
     });
-  }, [id, modalLayer, borderRadius, registerTarget]);
-
-  const handleLayout = (_event: LayoutChangeEvent) => {
-    measureAndRegister();
-  };
-
-  // Determine if this target is for the currently active onboarding step
-  const currentStep = ONBOARDING_STEPS.find((s) => s.id === currentStepId);
-  const isCurrentTarget = isActive && currentStep?.targetId === id;
-
-  // Measurement effect on mount, layout changes, & step activation
-  useEffect(() => {
-    measureAndRegister();
-
-    // Staggered measurement timers to catch layout settlement (tab bar, safe area, modals)
-    const t1 = setTimeout(measureAndRegister, 50);
-    const t2 = setTimeout(measureAndRegister, 150);
-    const t3 = setTimeout(measureAndRegister, 350);
-    const t4 = setTimeout(measureAndRegister, 600);
-
-    let intervalId: any = null;
-
-    // While this target is actively highlighted, continuously re-measure every 250ms
-    // to keep spotlight 100% aligned during scroll, animations, or screen resize.
-    if (isCurrentTarget) {
-      intervalId = setInterval(measureAndRegister, 250);
-    }
-
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-      clearTimeout(t4);
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [id, isCurrentTarget, currentStepId, isActive, measureAndRegister]);
+  }, [id, setTarget]);
 
   useEffect(() => {
-    return () => {
-      unregisterTarget(id);
-    };
-  }, [id, unregisterTarget]);
+    if (!isCurrent) return;
+    lastKey.current = '';
+    measure();
+    // Light polling keeps the rect correct through scrolling, keyboard and layout animations.
+    const timer = setInterval(measure, 300);
+    return () => clearInterval(timer);
+  }, [isCurrent, measure]);
+
+  useEffect(() => () => setTarget(id, null), [id, setTarget]);
 
   return (
     <View
       ref={viewRef}
-      onLayout={handleLayout}
+      collapsable={false}
       style={style}
       className={className}
-      collapsable={false}
+      onLayout={(e) => {
+        onLayoutY?.(e.nativeEvent.layout.y);
+        if (isCurrent) measure();
+      }}
     >
       {children}
     </View>
   );
 };
-
