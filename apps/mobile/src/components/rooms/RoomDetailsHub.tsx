@@ -15,6 +15,7 @@ import { FeedItemSkeleton } from '../ui/skeletons/FeedItemSkeleton';
 import { DotPulse } from '../ui/DotPulse';
 import { useNotice } from '../ui/Notice';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
+import { OnboardingTarget } from '../../onboarding/OnboardingTarget';
 
 interface RoomDetailsHubProps {
   roomDetails: any;
@@ -189,242 +190,248 @@ export const RoomDetailsHub: React.FC<RoomDetailsHubProps> = ({
 
 
         {/* CARD 3 — TODAY'S PROGRESS (Personal Room Progress) */}
-        <View className="bg-[#181513] border border-[#2B2521] p-5 rounded-2xl mb-5">
-          <View className="flex-row items-center justify-between mb-2">
-            <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest">
-              TODAY'S PROGRESS
+        <OnboardingTarget id="room.progress" borderRadius={16}>
+          <View className="bg-[#181513] border border-[#2B2521] p-5 rounded-2xl mb-5">
+            <View className="flex-row items-center justify-between mb-2">
+              <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest">
+                TODAY'S PROGRESS
+              </Text>
+              <Text className="text-xs font-bold text-[#E8C08A]">
+                {userPercent}% Complete
+              </Text>
+            </View>
+
+            <Text className="text-sm font-bold text-[#F5F2EC] mb-3">
+              {completedCount} of {totalCount} habits completed
             </Text>
-            <Text className="text-xs font-bold text-[#E8C08A]">
-              {userPercent}% Complete
-            </Text>
-          </View>
 
-          <Text className="text-sm font-bold text-[#F5F2EC] mb-3">
-            {completedCount} of {totalCount} habits completed
-          </Text>
+            {/* Visual Progress Bar */}
+            <View className="w-full h-2.5 bg-[#2B2521] rounded-full overflow-hidden mb-3">
+              <View
+                className="h-full bg-[#E8C08A] rounded-full"
+                style={{ width: `${userPercent}%` }}
+              />
+            </View>
 
-          {/* Visual Progress Bar */}
-          <View className="w-full h-2.5 bg-[#2B2521] rounded-full overflow-hidden mb-3">
-            <View
-              className="h-full bg-[#E8C08A] rounded-full"
-              style={{ width: `${userPercent}%` }}
-            />
-          </View>
-
-          {/* Supportive Status Message / 100% Completion Badge */}
-          <View className="flex-row items-center pt-1 mb-3">
-            {isAllCompleted ? (
-              <View className="flex-row items-center bg-[#8FBF9E]/20 border border-[#8FBF9E]/40 px-3 py-1.5 rounded-xl">
-                <Icon name="check" size={14} color="#8FBF9E" className="mr-1.5" />
-                <Text className="text-xs font-bold text-[#8FBF9E]">
-                  ✓ Today's room promises completed
+            {/* Supportive Status Message / 100% Completion Badge */}
+            <View className="flex-row items-center pt-1 mb-3">
+              {isAllCompleted ? (
+                <View className="flex-row items-center bg-[#8FBF9E]/20 border border-[#8FBF9E]/40 px-3 py-1.5 rounded-xl">
+                  <Icon name="check" size={14} color="#8FBF9E" className="mr-1.5" />
+                  <Text className="text-xs font-bold text-[#8FBF9E]">
+                    ✓ Today's room promises completed
+                  </Text>
+                </View>
+              ) : totalCount - completedCount === 1 ? (
+                <Text className="text-xs font-semibold text-[#E8C08A]">
+                  1 more promise to keep today.
                 </Text>
+              ) : completedCount > 0 ? (
+                <Text className="text-xs font-semibold text-[#E8C08A]">
+                  You're doing great today.
+                </Text>
+              ) : (
+                <Text className="text-xs text-[#9C958C]">
+                  Ready to show up today? Complete your habits below.
+                </Text>
+              )}
+            </View>
+
+            {/* Room Habit Names & Today's Completion Status */}
+            {trackedHabits.length > 0 && (
+              <View className="pt-3 border-t border-[#2B2521] space-y-2">
+                {trackedHabits.map((habit: any, idx: number) => {
+                  const userHabit = userHabits.find(
+                    (h: any) => h.name.toLowerCase() === habit.name.toLowerCase()
+                  );
+                  const isCompleted = userHabit?.completedToday;
+
+                  return (
+                    <View key={idx} className="flex-row items-center justify-between py-1">
+                      <View className="flex-row items-center flex-1 pr-2">
+                        <View className={`w-5 h-5 rounded-full items-center justify-center mr-2 ${isCompleted ? 'bg-[#8FBF9E]/20' : 'bg-[#2B2521]'}`}>
+                          <Icon
+                            name={isCompleted ? 'check' : 'target'}
+                            size={11}
+                            color={isCompleted ? '#8FBF9E' : '#9C958C'}
+                          />
+                        </View>
+                        <Text
+                          className={`text-xs font-semibold ${
+                            isCompleted ? 'text-[#8FBF9E]' : 'text-[#F5F2EC]'
+                          }`}
+                        >
+                          {habit.name}
+                        </Text>
+                      </View>
+
+                      <Text className={`text-[11px] font-bold ${isCompleted ? 'text-[#8FBF9E]' : 'text-[#65605A]'}`}>
+                        {isCompleted ? '✓ Completed' : '○ Pending'}
+                      </Text>
+                    </View>
+                  );
+                })}
               </View>
-            ) : totalCount - completedCount === 1 ? (
-              <Text className="text-xs font-semibold text-[#E8C08A]">
-                1 more promise to keep today.
-              </Text>
-            ) : completedCount > 0 ? (
-              <Text className="text-xs font-semibold text-[#E8C08A]">
-                You're doing great today.
-              </Text>
-            ) : (
-              <Text className="text-xs text-[#9C958C]">
-                Ready to show up today? Complete your habits below.
-              </Text>
             )}
           </View>
+        </OnboardingTarget>
 
-          {/* Room Habit Names & Today's Completion Status */}
-          {trackedHabits.length > 0 && (
-            <View className="pt-3 border-t border-[#2B2521] space-y-2">
-              {trackedHabits.map((habit: any, idx: number) => {
+        {/* CARD 4 — 🤝 SHARED HABITS */}
+        <OnboardingTarget id="room.sharedHabits" borderRadius={16}>
+          <View className="mb-5">
+            <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-3">
+              SHARED HABITS ({trackedHabits.length})
+            </Text>
+
+            {trackedHabits.length === 0 ? (
+              <View className="bg-[#181513] border border-[#2B2521] p-6 rounded-2xl items-center">
+                <Icon name="target" size={28} color="#65605A" className="mb-2" />
+                <Text className="text-sm text-[#9C958C]">This room doesn't have any tracked habits yet.</Text>
+              </View>
+            ) : (
+              trackedHabits.map((habit: any, habitIdx: number) => {
                 const userHabit = userHabits.find(
                   (h: any) => h.name.toLowerCase() === habit.name.toLowerCase()
                 );
-                const isCompleted = userHabit?.completedToday;
+                const isUserCompleted = userHabit?.completedToday;
 
                 return (
-                  <View key={idx} className="flex-row items-center justify-between py-1">
-                    <View className="flex-row items-center flex-1 pr-2">
-                      <View className={`w-5 h-5 rounded-full items-center justify-center mr-2 ${isCompleted ? 'bg-[#8FBF9E]/20' : 'bg-[#2B2521]'}`}>
-                        <Icon
-                          name={isCompleted ? 'check' : 'target'}
-                          size={11}
-                          color={isCompleted ? '#8FBF9E' : '#9C958C'}
-                        />
-                      </View>
-                      <Text
-                        className={`text-xs font-semibold ${
-                          isCompleted ? 'text-[#8FBF9E]' : 'text-[#F5F2EC]'
-                        }`}
-                      >
-                        {habit.name}
-                      </Text>
-                    </View>
-
-                    <Text className={`text-[11px] font-bold ${isCompleted ? 'text-[#8FBF9E]' : 'text-[#65605A]'}`}>
-                      {isCompleted ? '✓ Completed' : '○ Pending'}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-          )}
-        </View>
-
-        {/* CARD 4 — 🤝 SHARED HABITS */}
-        <View className="mb-5">
-          <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-3">
-            SHARED HABITS ({trackedHabits.length})
-          </Text>
-
-          {trackedHabits.length === 0 ? (
-            <View className="bg-[#181513] border border-[#2B2521] p-6 rounded-2xl items-center">
-              <Icon name="target" size={28} color="#65605A" className="mb-2" />
-              <Text className="text-sm text-[#9C958C]">This room doesn't have any tracked habits yet.</Text>
-            </View>
-          ) : (
-            trackedHabits.map((habit: any, habitIdx: number) => {
-              const userHabit = userHabits.find(
-                (h: any) => h.name.toLowerCase() === habit.name.toLowerCase()
-              );
-              const isUserCompleted = userHabit?.completedToday;
-
-              return (
-                <View key={habitIdx} className="bg-[#181513] border border-[#2B2521] p-4 rounded-2xl mb-3">
-                  <View className="flex-row items-center justify-between mb-3 pb-3 border-b border-[#2B2521]">
-                    <View className="flex-row items-center">
-                      <View className="w-8 h-8 rounded-xl bg-[#3A2E1F] border border-[#E8C08A]/30 items-center justify-center mr-2.5">
-                        <Icon name={habit.icon || 'target'} size={16} color="#E8C08A" />
-                      </View>
-                      <Text className="text-base font-bold text-[#F5F2EC]">{habit.name}</Text>
-                    </View>
-                  </View>
-
-                  {/* Member Completion Rows */}
-                  <View className="space-y-2">
-                    {/* Current User Row */}
-                    <View className="flex-row items-center justify-between py-2 px-2.5 bg-[#241E1A] rounded-xl border border-[#3A2E1F]">
+                  <View key={habitIdx} className="bg-[#181513] border border-[#2B2521] p-4 rounded-2xl mb-3">
+                    <View className="flex-row items-center justify-between mb-3 pb-3 border-b border-[#2B2521]">
                       <View className="flex-row items-center">
-                        <Avatar name="You" size={26} />
-                        <Text className="text-xs font-bold text-[#F5F2EC] ml-2">You</Text>
-                        <View className="bg-[#3A2E1F] px-1.5 py-0.5 rounded-full ml-1.5">
-                          <Text className="text-[9px] font-bold text-[#E8C08A]">YOU</Text>
+                        <View className="w-8 h-8 rounded-xl bg-[#3A2E1F] border border-[#E8C08A]/30 items-center justify-center mr-2.5">
+                          <Icon name={habit.icon || 'target'} size={16} color="#E8C08A" />
                         </View>
+                        <Text className="text-base font-bold text-[#F5F2EC]">{habit.name}</Text>
                       </View>
-
-                      {isUserCompleted ? (
-                        <View className="flex-row items-center bg-[#8FBF9E]/20 border border-[#8FBF9E]/40 px-2.5 py-1 rounded-full">
-                          <Icon name="check" size={12} color="#8FBF9E" className="mr-1" />
-                          <Text className="text-[11px] font-bold text-[#8FBF9E]">Completed</Text>
-                        </View>
-                      ) : (
-                        <TouchableOpacity
-                          onPress={() => handleQuickComplete(habit.name)}
-                          disabled={completingHabitName === habit.name}
-                          className="flex-row items-center bg-[#E8C08A] px-3.5 py-1 rounded-full"
-                        >
-                          {completingHabitName === habit.name ? (
-                            <DotPulse color="#241C14" size={4} />
-                          ) : (
-                            <Text className="text-[11px] font-bold text-[#241C14]">
-                              ○ Complete
-                            </Text>
-                          )}
-                        </TouchableOpacity>
-                      )}
                     </View>
 
-                    {/* Other Members Rows */}
-                    {roomMembers
-                      .filter((m: any) => (m.user?.id || m.profileId) !== currentUserId)
-                      .map((m: any, mIdx: number) => {
-                        const mName = m.user?.displayName || m.displayName || 'Member';
-                        const memberId = m.user?.id || m.profileId;
-                        const todayIso = new Date().toISOString().split('T')[0];
-                        const targetHabitName = habit.name.toLowerCase().trim();
+                    {/* Member Completion Rows */}
+                    <View className="space-y-2">
+                      {/* Current User Row */}
+                      <View className="flex-row items-center justify-between py-2 px-2.5 bg-[#241E1A] rounded-xl border border-[#3A2E1F]">
+                        <View className="flex-row items-center">
+                          <Avatar name="You" size={26} />
+                          <Text className="text-xs font-bold text-[#F5F2EC] ml-2">You</Text>
+                          <View className="bg-[#3A2E1F] px-1.5 py-0.5 rounded-full ml-1.5">
+                            <Text className="text-[9px] font-bold text-[#E8C08A]">YOU</Text>
+                          </View>
+                        </View>
 
-                        const isCompletedToday = roomActivities.some((act: any) => {
-                          const matchesActor = act.actorUserId === memberId || (act.actorDisplayName && act.actorDisplayName === mName);
-                          if (!matchesActor) return false;
-
-                          const actHabitMeta = act.metadata_json?.habitName?.toLowerCase()?.trim();
-                          const actMsg = act.message?.toLowerCase();
-                          const matchesHabit = actHabitMeta ? actHabitMeta === targetHabitName : actMsg?.includes(targetHabitName);
-                          if (!matchesHabit) return false;
-
-                          const actDate = act.metadata_json?.localDate || (act.createdAt ? new Date(act.createdAt).toISOString().split('T')[0] : null);
-                          return !actDate || actDate === todayIso;
-                        });
-
-                        return (
+                        {isUserCompleted ? (
+                          <View className="flex-row items-center bg-[#8FBF9E]/20 border border-[#8FBF9E]/40 px-2.5 py-1 rounded-full">
+                            <Icon name="check" size={12} color="#8FBF9E" className="mr-1" />
+                            <Text className="text-[11px] font-bold text-[#8FBF9E]">Completed</Text>
+                          </View>
+                        ) : (
                           <TouchableOpacity
-                            key={mIdx}
-                            onPress={() =>
-                              setSelectedMember({
-                                id: m.id,
-                                userId: m.user?.id || m.profileId,
-                                displayName: mName,
-                                username: m.user?.username || m.username || 'user',
-                                avatarPath: m.user?.avatarPath,
-                                role: m.role,
-                                joinedAt: m.joinedAt,
-                                bio: m.user?.bio,
-                              })
-                            }
-                            className="flex-row items-center justify-between py-2 px-2.5 rounded-xl"
+                            onPress={() => handleQuickComplete(habit.name)}
+                            disabled={completingHabitName === habit.name}
+                            className="flex-row items-center bg-[#E8C08A] px-3.5 py-1 rounded-full"
                           >
-                            <View className="flex-row items-center">
-                              <Avatar name={mName} size={24} />
-                              <Text className="text-xs font-semibold text-[#9C958C] ml-2">{mName}</Text>
-                            </View>
-
-                            {isCompletedToday ? (
-                              <View className="flex-row items-center bg-[#8FBF9E]/20 border border-[#8FBF9E]/40 px-2.5 py-1 rounded-full">
-                                <Icon name="check" size={12} color="#8FBF9E" className="mr-1" />
-                                <Text className="text-[11px] font-bold text-[#8FBF9E]">Completed</Text>
-                              </View>
+                            {completingHabitName === habit.name ? (
+                              <DotPulse color="#241C14" size={4} />
                             ) : (
-                              <Text className="text-xs text-[#65605A]">○</Text>
+                              <Text className="text-[11px] font-bold text-[#241C14]">
+                                ○ Complete
+                              </Text>
                             )}
                           </TouchableOpacity>
-                        );
-                      })}
+                        )}
+                      </View>
+
+                      {/* Other Members Rows */}
+                      {roomMembers
+                        .filter((m: any) => (m.user?.id || m.profileId) !== currentUserId)
+                        .map((m: any, mIdx: number) => {
+                          const mName = m.user?.displayName || m.displayName || 'Member';
+                          const memberId = m.user?.id || m.profileId;
+                          const todayIso = new Date().toISOString().split('T')[0];
+                          const targetHabitName = habit.name.toLowerCase().trim();
+
+                          const isCompletedToday = roomActivities.some((act: any) => {
+                            const matchesActor = act.actorUserId === memberId || (act.actorDisplayName && act.actorDisplayName === mName);
+                            if (!matchesActor) return false;
+
+                            const actHabitMeta = act.metadata_json?.habitName?.toLowerCase()?.trim();
+                            const actMsg = act.message?.toLowerCase();
+                            const matchesHabit = actHabitMeta ? actHabitMeta === targetHabitName : actMsg?.includes(targetHabitName);
+                            if (!matchesHabit) return false;
+
+                            const actDate = act.metadata_json?.localDate || (act.createdAt ? new Date(act.createdAt).toISOString().split('T')[0] : null);
+                            return !actDate || actDate === todayIso;
+                          });
+
+                          return (
+                            <TouchableOpacity
+                              key={mIdx}
+                              onPress={() =>
+                                setSelectedMember({
+                                  id: m.id,
+                                  userId: m.user?.id || m.profileId,
+                                  displayName: mName,
+                                  username: m.user?.username || m.username || 'user',
+                                  avatarPath: m.user?.avatarPath,
+                                  role: m.role,
+                                  joinedAt: m.joinedAt,
+                                  bio: m.user?.bio,
+                                })
+                              }
+                              className="flex-row items-center justify-between py-2 px-2.5 rounded-xl"
+                            >
+                              <View className="flex-row items-center">
+                                <Avatar name={mName} size={24} />
+                                <Text className="text-xs font-semibold text-[#9C958C] ml-2">{mName}</Text>
+                              </View>
+
+                              {isCompletedToday ? (
+                                <View className="flex-row items-center bg-[#8FBF9E]/20 border border-[#8FBF9E]/40 px-2.5 py-1 rounded-full">
+                                  <Icon name="check" size={12} color="#8FBF9E" className="mr-1" />
+                                  <Text className="text-[11px] font-bold text-[#8FBF9E]">Completed</Text>
+                                </View>
+                              ) : (
+                                <Text className="text-xs text-[#65605A]">○</Text>
+                              )}
+                            </TouchableOpacity>
+                          );
+                        })}
+                    </View>
                   </View>
-                </View>
-              );
-            })
-          )}
-        </View>
+                );
+              })
+            )}
+          </View>
+        </OnboardingTarget>
 
         {/* CARD 5 — ⚡ ACTIVITY FEED */}
-        <View className="mb-10">
-          <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-3">
-            ACTIVITY
-          </Text>
+        <OnboardingTarget id="room.activity" borderRadius={16}>
+          <View className="mb-10">
+            <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-3">
+              ACTIVITY
+            </Text>
 
-          {showSkeleton ? (
-            <View className="bg-[#181513] border border-[#2B2521] rounded-2xl p-3">
-              <FeedItemSkeleton />
-              <FeedItemSkeleton />
-              <FeedItemSkeleton />
-              <FeedItemSkeleton />
-            </View>
-          ) : feedItems.length <= 1 ? (
-            <View className="bg-[#181513] border border-[#2B2521] p-6 rounded-2xl items-center">
-              <Icon name="feed" size={28} color="#65605A" className="mb-2" />
-              <Text className="text-sm font-semibold text-[#F5F2EC] mb-1">Nothing yet</Text>
-              <Text className="text-xs text-[#9C958C] text-center">
-                Be the first person to complete a habit today.
-              </Text>
-            </View>
-          ) : (
-            <View className="bg-[#181513] border border-[#2B2521] rounded-2xl overflow-hidden p-2">
-              <RoomChatFeed items={feedItems} onToggleReaction={onToggleReaction} />
-            </View>
-          )}
-        </View>
+            {showSkeleton ? (
+              <View className="bg-[#181513] border border-[#2B2521] rounded-2xl p-3">
+                <FeedItemSkeleton />
+                <FeedItemSkeleton />
+                <FeedItemSkeleton />
+                <FeedItemSkeleton />
+              </View>
+            ) : feedItems.length <= 1 ? (
+              <View className="bg-[#181513] border border-[#2B2521] p-6 rounded-2xl items-center">
+                <Icon name="feed" size={28} color="#65605A" className="mb-2" />
+                <Text className="text-sm font-semibold text-[#F5F2EC] mb-1">Nothing yet</Text>
+                <Text className="text-xs text-[#9C958C] text-center">
+                  Be the first person to complete a habit today.
+                </Text>
+              </View>
+            ) : (
+              <View className="bg-[#181513] border border-[#2B2521] rounded-2xl overflow-hidden p-2">
+                <RoomChatFeed items={feedItems} onToggleReaction={onToggleReaction} />
+              </View>
+            )}
+          </View>
+        </OnboardingTarget>
       </ScrollView>
 
       {/* Member Profile Bottom Sheet */}

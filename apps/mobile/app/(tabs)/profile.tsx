@@ -13,6 +13,7 @@ import { DotPulse } from '../../src/components/ui/DotPulse';
 import { useNotice } from '../../src/components/ui/Notice';
 import { ConfirmDialog } from '../../src/components/ui/ConfirmDialog';
 import { useDelayedLoading } from '../../src/hooks/useDelayedLoading';
+import { useOnboardingStore } from '../../src/store/onboarding-store';
 
 export default function ProfileScreen() {
   const { user, loading, updateUser, signOut, deleteUserAccount } = useAuthStore();
@@ -47,6 +48,11 @@ export default function ProfileScreen() {
     } catch (e: any) {
       notice.error(e.message || 'Failed to delete account');
     }
+  };
+
+  const handleReplayTutorial = async () => {
+    if (!user?.id) return;
+    await useOnboardingStore.getState().replay(user.id);
   };
 
   if (showSkeleton || !user) {
@@ -169,6 +175,17 @@ export default function ProfileScreen() {
         {/* Account Settings Card matching Figma */}
         <View className="bg-[#181513] border border-[#2B2521] p-5 rounded-2xl mb-12 shadow-sm">
           <Text className="text-base font-bold text-[#F5F2EC] mb-4">Account Settings</Text>
+
+          <TouchableOpacity
+            onPress={handleReplayTutorial}
+            className="py-3.5 border-b border-[#2B2521] flex-row justify-between items-center"
+          >
+            <View className="flex-row items-center">
+              <Icon name="book-open" size={16} color="#E8C08A" className="mr-2.5" />
+              <Text className="text-sm text-[#F5F2EC] font-medium">Replay Tutorial</Text>
+            </View>
+            <Icon name="arrow-right" size={16} color="#E8C08A" />
+          </TouchableOpacity>
 
           <TouchableOpacity
             onPress={signOut}

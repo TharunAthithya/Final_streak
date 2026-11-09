@@ -12,6 +12,9 @@ import { Icon } from '../ui/Icon';
 import { SlideToBegin } from './SlideToBegin';
 import { useDailyStoryStore } from '../../store/daily-story-store';
 import { toLocalDateString } from '../../utils/streak';
+import { useOnboardingStore } from '../../store/onboarding-store';
+import { OnboardingTarget } from '../../onboarding/OnboardingTarget';
+import { OnboardingOverlay } from '../../onboarding/OnboardingOverlay';
 
 interface DailyStoryModalProps {
   visible: boolean;
@@ -40,7 +43,10 @@ export const DailyStoryModal: React.FC<DailyStoryModalProps> = ({
   useEffect(() => {
     if (visible) {
       const alreadySeen = hasSeenSplashForDate(todayStr);
-      if (alreadySeen) {
+      const isOnboardingLesson =
+        useOnboardingStore.getState().isActive &&
+        useOnboardingStore.getState().currentSection === 'LESSON';
+      if (alreadySeen && !isOnboardingLesson) {
         setViewStage('CARDS');
       } else {
         setViewStage('SPLASH');
@@ -68,6 +74,7 @@ export const DailyStoryModal: React.FC<DailyStoryModalProps> = ({
   const handleSlideComplete = async () => {
     await markSplashSeenForDate(todayStr);
     setViewStage('CARDS');
+    useOnboardingStore.getState().completeEvent('LESSON_STARTED');
   };
 
   const handleFinishLesson = () => {
@@ -113,37 +120,43 @@ export const DailyStoryModal: React.FC<DailyStoryModalProps> = ({
               </View>
 
               {/* Main Headline Quote */}
-              <Text
-                className="text-[28px] text-[#F5F2EC] leading-[38px] font-medium tracking-tight mb-8"
-                style={{ fontFamily: 'Baloo 2' }}
-              >
-                Showing up{' '}
-                <Text className="italic font-bold text-[#E8C08A]">
-                  when it's easiest to skip
-                </Text>{' '}
-                is how a promise becomes an identity.
-              </Text>
+              <OnboardingTarget id="lesson.modal" modalLayer="dailyStory" borderRadius={16}>
+                <View>
+                  <Text
+                    className="text-[28px] text-[#F5F2EC] leading-[38px] font-medium tracking-tight mb-8"
+                    style={{ fontFamily: 'Baloo 2' }}
+                  >
+                    Showing up{' '}
+                    <Text className="italic font-bold text-[#E8C08A]">
+                      when it's easiest to skip
+                    </Text>{' '}
+                    is how a promise becomes an identity.
+                  </Text>
 
-              {/* Gold Divider Line */}
-              <View className="h-[1px] bg-[#2B2521] w-full mb-8" />
+                  {/* Gold Divider Line */}
+                  <View className="h-[1px] bg-[#2B2521] w-full mb-8" />
 
-              {/* Body Paragraph */}
-              <Text className="text-base text-[#9C958C] leading-[26px] font-normal mb-8">
-                {promiseDay} days ago, you made a decision — not to be perfect, but to be someone who keeps their word to themselves.
-              </Text>
+                  {/* Body Paragraph */}
+                  <Text className="text-base text-[#9C958C] leading-[26px] font-normal mb-8">
+                    {promiseDay} days ago, you made a decision — not to be perfect, but to be someone who keeps their word to themselves.
+                  </Text>
 
-              {/* Gold Italic Callout */}
-              <Text className="text-base italic font-semibold text-[#E8C08A] leading-relaxed">
-                Begin with one action. The rest will follow.
-              </Text>
+                  {/* Gold Italic Callout */}
+                  <Text className="text-base italic font-semibold text-[#E8C08A] leading-relaxed">
+                    Begin with one action. The rest will follow.
+                  </Text>
+                </View>
+              </OnboardingTarget>
             </View>
 
             {/* Bottom Slider or Direct Read Action */}
             <View className="w-full pt-4">
-              <SlideToBegin
-                onSlideComplete={handleSlideComplete}
-                label={isReadonly ? 'Slide to view lesson' : 'Slide to begin'}
-              />
+              <OnboardingTarget id="lesson.slide" modalLayer="dailyStory" borderRadius={32}>
+                <SlideToBegin
+                  onSlideComplete={handleSlideComplete}
+                  label={isReadonly ? 'Slide to view lesson' : 'Slide to begin'}
+                />
+              </OnboardingTarget>
             </View>
           </Animated.View>
         ) : (
@@ -236,27 +249,30 @@ export const DailyStoryModal: React.FC<DailyStoryModalProps> = ({
 
             {/* Sticky Bottom Action Bar */}
             <View className="px-6 pb-10 pt-4 bg-[#141110] border-t border-[#2B2521]">
-              {!isReadonly ? (
-                <TouchableOpacity
-                  onPress={handleFinishLesson}
-                  activeOpacity={0.8}
-                  className="w-full py-4 bg-[#E8C08A] rounded-2xl items-center justify-center flex-row shadow-md"
-                >
-                  <Icon name="check" size={18} color="#241C14" className="mr-2" />
-                  <Text className="text-base font-bold text-[#241C14]">I'm Ready</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  onPress={onClose}
-                  activeOpacity={0.8}
-                  className="w-full py-4 bg-[#181513] border border-[#2B2521] rounded-2xl items-center justify-center flex-row"
-                >
-                  <Text className="text-base font-semibold text-[#F5F2EC]">Close</Text>
-                </TouchableOpacity>
-              )}
+              <OnboardingTarget id="lesson.close" modalLayer="dailyStory" borderRadius={16}>
+                {!isReadonly ? (
+                  <TouchableOpacity
+                    onPress={handleFinishLesson}
+                    activeOpacity={0.8}
+                    className="w-full py-4 bg-[#E8C08A] rounded-2xl items-center justify-center flex-row shadow-md"
+                  >
+                    <Icon name="check" size={18} color="#241C14" className="mr-2" />
+                    <Text className="text-base font-bold text-[#241C14]">I'm Ready</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    onPress={onClose}
+                    activeOpacity={0.8}
+                    className="w-full py-4 bg-[#181513] border border-[#2B2521] rounded-2xl items-center justify-center flex-row"
+                  >
+                    <Text className="text-base font-semibold text-[#F5F2EC]">Close</Text>
+                  </TouchableOpacity>
+                )}
+              </OnboardingTarget>
             </View>
           </View>
         )}
+        <OnboardingOverlay modalLayer="dailyStory" useNativeModal={false} />
       </View>
     </Modal>
   );

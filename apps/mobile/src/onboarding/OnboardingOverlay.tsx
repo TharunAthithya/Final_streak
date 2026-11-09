@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Modal,
@@ -19,9 +19,12 @@ interface OnboardingOverlayProps {
   useNativeModal?: boolean;
 }
 
+const SPOTLIGHT_PADDING = 6;
+const BACKDROP_COLOR = 'rgba(8, 7, 6, 0.78)';
+
 export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({
   modalLayer,
-  useNativeModal = true,
+  useNativeModal = false,
 }) => {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -34,6 +37,24 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({
   const previous = useOnboardingStore((s) => s.previous);
   const skipSection = useOnboardingStore((s) => s.skipSection);
   const exit = useOnboardingStore((s) => s.exit);
+
+  const handleRequestExit = useCallback(() => {
+    setShowExitConfirm(true);
+  }, []);
+
+  const handleContinue = useCallback(() => {
+    setShowExitConfirm(false);
+  }, []);
+
+  const handleSkipSection = useCallback(() => {
+    setShowExitConfirm(false);
+    skipSection();
+  }, [skipSection]);
+
+  const handleExit = useCallback(() => {
+    setShowExitConfirm(false);
+    exit();
+  }, [exit]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -58,7 +79,7 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({
   const targetReg = targetId ? targets[targetId] : undefined;
   const targetRect = targetReg?.rect;
 
-  const cardSize = { width: Math.min(320, windowWidth - 32), height: 180 };
+  const cardSize = { width: Math.min(320, windowWidth - 32), height: 190 };
   const safeArea = {
     top: Math.max(insets.top, Platform.OS === 'ios' ? 44 : 32),
     bottom: Math.max(insets.bottom, 40),
@@ -71,8 +92,100 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({
     safeArea
   );
 
+  const isActionStep = currentStep.stepType === 'ACTION';
+
+  // Compute spotlight hole coordinates with padding
+  const hole = targetRect
+    ? {
+        x: Math.max(0, targetRect.x - SPOTLIGHT_PADDING),
+        y: Math.max(0, targetRect.y - SPOTLIGHT_PADDING),
+        width: Math.min(windowWidth, targetRect.width + SPOTLIGHT_PADDING * 2),
+        height: Math.min(windowHeight, targetRect.height + SPOTLIGHT_PADDING * 2),
+        borderRadius: (targetRect.borderRadius ?? 16) + 4,
+      }
+    : null;
+
   const canvas = (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+    <View style={[StyleSheet.absoluteFill, styles.rootContainer]} pointerEvents="box-none">
+      {/* Dimmed Backdrop Panels & Spotlight Cutout */}
+      {hole ? (
+        <>
+          {/* Top panel */}
+          <View
+            pointerEvents="auto"
+            style={[
+              styles.backdropPanel,
+              {
+                top: 0,
+                left: 0,
+                right: 0,
+                height: hole.y,
+              },
+            ]}
+          />
+          {/* Bottom panel */}
+          <View
+            pointerEvents="auto"
+            style={[
+              styles.backdropPanel,
+              {
+                top: hole.y + hole.height,
+                left: 0,
+                right: 0,
+                bottom: 0,
+              },
+            ]}
+          />
+          {/* Left panel */}
+          <View
+            pointerEvents="auto"
+            style={[
+              styles.backdropPanel,
+              {
+                top: hole.y,
+                left: 0,
+                width: hole.x,
+                height: hole.height,
+              },
+            ]}
+          />
+          {/* Right panel */}
+          <View
+            pointerEvents="auto"
+            style={[
+              styles.backdropPanel,
+              {
+                top: hole.y,
+                left: hole.x + hole.width,
+                right: 0,
+                height: hole.height,
+              },
+            ]}
+          />
+          {/* Spotlight Hole Ring (touch-through for ACTION steps, blocks touches for EXPLANATION/OBSERVE) */}
+          <View
+            pointerEvents={isActionStep ? 'none' : 'auto'}
+            style={[
+              styles.spotlightRing,
+              {
+                top: hole.y,
+                left: hole.x,
+                width: hole.width,
+                height: hole.height,
+                borderRadius: hole.borderRadius,
+              },
+            ]}
+          />
+        </>
+      ) : (
+        /* Full-screen dim when there is no specific target (e.g. onboarding.complete) */
+        <View
+          pointerEvents={isActionStep ? 'none' : 'auto'}
+          style={[StyleSheet.absoluteFill, styles.backdropPanel]}
+        />
+      )}
+
+      {/* Coachmark Card */}
       <View
         pointerEvents="box-none"
         style={{
@@ -80,27 +193,22 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({
           left: pos.x,
           top: pos.y,
           width: cardSize.width,
+          zIndex: 10,
         }}
       >
         <OnboardingCoachmark
           step={currentStep}
           onNext={next}
           onPrevious={previous}
-          onRequestExit={() => setShowExitConfirm(true)}
+          onRequestExit={handleRequestExit}
         />
       </View>
 
       <OnboardingExitModal
         visible={showExitConfirm}
-        onContinue={() => setShowExitConfirm(false)}
-        onSkipSection={() => {
-          setShowExitConfirm(false);
-          skipSection();
-        }}
-        onExit={() => {
-          setShowExitConfirm(false);
-          exit();
-        }}
+        onContinue={handleContinue}
+        onSkipSection={handleSkipSection}
+        onExit={handleExit}
       />
     </View>
   );
@@ -112,7 +220,7 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({
         transparent
         animationType="none"
         statusBarTranslucent
-        onRequestClose={() => setShowExitConfirm(true)}
+        onRequestClose={handleRequestExit}
       >
         {canvas}
       </Modal>
@@ -121,3 +229,19 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({
 
   return canvas;
 };
+
+const styles = StyleSheet.create({
+  rootContainer: {
+    zIndex: 9999,
+    elevation: 9999,
+  },
+  backdropPanel: {
+    position: 'absolute',
+    backgroundColor: BACKDROP_COLOR,
+  },
+  spotlightRing: {
+    position: 'absolute',
+    borderWidth: 2,
+    borderColor: '#E8C08A',
+  },
+});

@@ -22,6 +22,8 @@ import { toLocalDateString } from '../../src/utils/streak';
 import { RoomCardSkeleton } from '../../src/components/ui/skeletons/RoomCardSkeleton';
 import { useNotice } from '../../src/components/ui/Notice';
 import { useDelayedLoading } from '../../src/hooks/useDelayedLoading';
+import { useOnboardingStore } from '../../src/store/onboarding-store';
+import { OnboardingTarget } from '../../src/onboarding/OnboardingTarget';
 
 export default function RoomsScreen() {
   const { user, apiClient } = useAuthStore();
@@ -55,6 +57,28 @@ export default function RoomsScreen() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
+
+  const currentOnboardingStepId = useOnboardingStore((s) => s.currentStepId);
+  const isOnboardingActive = useOnboardingStore((s) => s.isActive);
+
+  // Sync rooms tutorial steps with UI state (Join form & Create Room modal)
+  useEffect(() => {
+    if (!isOnboardingActive) return;
+    if (currentOnboardingStepId === 'rooms.roomCode') {
+      setShowJoin(true);
+      setShowCreateModal(false);
+    } else if (
+      currentOnboardingStepId === 'room.create.habits' ||
+      currentOnboardingStepId === 'room.create.invite' ||
+      currentOnboardingStepId === 'room.create.duration'
+    ) {
+      setShowJoin(false);
+      setShowCreateModal(true);
+    } else if (currentOnboardingStepId === 'room.card') {
+      setShowCreateModal(false);
+      setShowJoin(false);
+    }
+  }, [currentOnboardingStepId, isOnboardingActive]);
 
   // Habit matching gate state
   const [pendingGateRoom, setPendingGateRoom] = useState<{
@@ -276,47 +300,62 @@ export default function RoomsScreen() {
 
         {/* Action Buttons */}
         <View className="flex-row mb-8">
-          <TouchableOpacity
-            onPress={() => {
-              setShowCreateModal(true);
-              setShowJoin(false);
-            }}
-            className="flex-1 bg-[#E8C08A] py-3.5 rounded-xl items-center flex-row justify-center mr-2 shadow-sm"
-          >
-            <Icon name="plus" size={16} color="#241C14" className="mr-1.5" />
-            <Text className="text-[#241C14] font-bold text-sm">Create Room</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => {
-              setShowJoin(!showJoin);
-              setShowCreateModal(false);
-            }}
-            className="flex-1 bg-[#181513] border border-[#2B2521] py-3.5 rounded-xl items-center flex-row justify-center ml-2 shadow-sm"
-          >
-            <Icon name="users" size={16} color="#E8C08A" className="mr-1.5" />
-            <Text className="text-[#E8C08A] font-bold text-sm">Join Room</Text>
-          </TouchableOpacity>
+          <View className="flex-1 mr-2">
+            <OnboardingTarget id="rooms.createBtn" borderRadius={12}>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowCreateModal(true);
+                  setShowJoin(false);
+                  useOnboardingStore.getState().completeEvent('CREATE_ROOM_OPENED');
+                }}
+                className="bg-[#E8C08A] py-3.5 rounded-xl items-center flex-row justify-center shadow-sm"
+              >
+                <Icon name="plus" size={16} color="#241C14" className="mr-1.5" />
+                <Text className="text-[#241C14] font-bold text-sm">Create Room</Text>
+              </TouchableOpacity>
+            </OnboardingTarget>
+          </View>
+          <View className="flex-1 ml-2">
+            <OnboardingTarget id="rooms.joinBtn" borderRadius={12}>
+              <TouchableOpacity
+                onPress={() => {
+                  const nextJoin = !showJoin;
+                  setShowJoin(nextJoin);
+                  setShowCreateModal(false);
+                  if (nextJoin) {
+                    useOnboardingStore.getState().completeEvent('JOIN_ROOM_OPENED');
+                  }
+                }}
+                className="bg-[#181513] border border-[#2B2521] py-3.5 rounded-xl items-center flex-row justify-center shadow-sm"
+              >
+                <Icon name="users" size={16} color="#E8C08A" className="mr-1.5" />
+                <Text className="text-[#E8C08A] font-bold text-sm">Join Room</Text>
+              </TouchableOpacity>
+            </OnboardingTarget>
+          </View>
         </View>
 
         {/* Join Room Form */}
         {showJoin && (
-          <View className="bg-[#181513] border border-[#2B2521] p-5 rounded-2xl mb-6">
-            <Text className="text-xs font-semibold text-[#65605A] uppercase tracking-wider mb-2">Invite Code</Text>
-            <TextInput
-              value={inviteCode}
-              onChangeText={setInviteCode}
-              placeholder="e.g. CODE-7F3K9"
-              placeholderTextColor="#65605A"
-              autoCapitalize="characters"
-              className="px-4 py-3 bg-[#0B0B0C] border border-[#2B2521] text-[#F5F2EC] rounded-xl mb-4"
-            />
-            <TouchableOpacity
-              onPress={handleJoinRoom}
-              className="bg-[#E8C08A] py-3.5 rounded-xl items-center"
-            >
-              <Text className="text-[#241C14] font-bold text-sm">Join Room</Text>
-            </TouchableOpacity>
-          </View>
+          <OnboardingTarget id="rooms.joinCode" borderRadius={16}>
+            <View className="bg-[#181513] border border-[#2B2521] p-5 rounded-2xl mb-6">
+              <Text className="text-xs font-semibold text-[#65605A] uppercase tracking-wider mb-2">Invite Code</Text>
+              <TextInput
+                value={inviteCode}
+                onChangeText={setInviteCode}
+                placeholder="e.g. CODE-7F3K9"
+                placeholderTextColor="#65605A"
+                autoCapitalize="characters"
+                className="px-4 py-3 bg-[#0B0B0C] border border-[#2B2521] text-[#F5F2EC] rounded-xl mb-4"
+              />
+              <TouchableOpacity
+                onPress={handleJoinRoom}
+                className="bg-[#E8C08A] py-3.5 rounded-xl items-center"
+              >
+                <Text className="text-[#241C14] font-bold text-sm">Join Room</Text>
+              </TouchableOpacity>
+            </View>
+          </OnboardingTarget>
         )}
 
         {/* Rooms Section */}
@@ -331,43 +370,56 @@ export default function RoomsScreen() {
             <RoomCardSkeleton />
           </View>
         ) : rooms.length === 0 ? (
-          <View className="bg-[#181513] border border-[#2B2521] p-8 rounded-2xl items-center mt-2">
-            <Icon name="rooms" size={32} color="#E8C08A" className="mb-2" />
-            <Text className="text-base font-semibold text-[#F5F2EC]">No Rooms Joined</Text>
-            <Text className="text-sm text-[#9C958C] text-center mt-1">Create a room or ask for an invite code to join others.</Text>
-          </View>
+          <OnboardingTarget id="rooms.roomCard" borderRadius={16}>
+            <View className="bg-[#181513] border border-[#2B2521] p-8 rounded-2xl items-center mt-2">
+              <Icon name="rooms" size={32} color="#E8C08A" className="mb-2" />
+              <Text className="text-base font-semibold text-[#F5F2EC]">No Rooms Joined</Text>
+              <Text className="text-sm text-[#9C958C] text-center mt-1">Create a room or ask for an invite code to join others.</Text>
+            </View>
+          </OnboardingTarget>
         ) : (
-          rooms.map((room) => (
-            <TouchableOpacity
-              key={room.id}
-              onPress={() => {
-                setOptimisticRoom(room);
-                setSelectedRoomId(room.id);
-              }}
-              className="bg-[#181513] border border-[#2B2521] p-5 rounded-2xl mb-4 flex-row items-center justify-between"
-            >
-              <View className="flex-row items-center flex-1 pr-4">
-                <View className="w-12 h-12 bg-[#221C16] rounded-2xl items-center justify-center mr-4 border border-[#3A2E1F]">
-                  <Icon name="rooms" size={20} color="#E8C08A" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-lg font-bold text-[#F5F2EC] mb-0.5">{room.name}</Text>
-                  {room.description ? (
-                    <Text className="text-xs text-[#9C958C] mb-1.5" numberOfLines={1}>
-                      {room.description}
-                    </Text>
-                  ) : null}
-                  <View className="flex-row items-center">
-                    <View className="w-2 h-2 rounded-full bg-[#E8C08A] mr-1.5" />
-                    <Text className="text-xs text-[#9C958C]">
-                      {room.memberCount || 1} active member{room.memberCount === 1 ? '' : 's'}
-                    </Text>
+          rooms.map((room, idx) => {
+            const card = (
+              <TouchableOpacity
+                key={room.id}
+                onPress={() => {
+                  setOptimisticRoom(room);
+                  setSelectedRoomId(room.id);
+                  useOnboardingStore.getState().completeEvent('ROOM_OPENED');
+                }}
+                className="bg-[#181513] border border-[#2B2521] p-5 rounded-2xl mb-4 flex-row items-center justify-between"
+              >
+                <View className="flex-row items-center flex-1 pr-4">
+                  <View className="w-12 h-12 bg-[#221C16] rounded-2xl items-center justify-center mr-4 border border-[#3A2E1F]">
+                    <Icon name="rooms" size={20} color="#E8C08A" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-lg font-bold text-[#F5F2EC] mb-0.5">{room.name}</Text>
+                    {room.description ? (
+                      <Text className="text-xs text-[#9C958C] mb-1.5" numberOfLines={1}>
+                        {room.description}
+                      </Text>
+                    ) : null}
+                    <View className="flex-row items-center">
+                      <View className="w-2 h-2 rounded-full bg-[#E8C08A] mr-1.5" />
+                      <Text className="text-xs text-[#9C958C]">
+                        {room.memberCount || 1} active member{room.memberCount === 1 ? '' : 's'}
+                      </Text>
+                    </View>
                   </View>
                 </View>
-              </View>
-              <Icon name="chevron-right" size={20} color="#65605A" />
-            </TouchableOpacity>
-          ))
+                <Icon name="chevron-right" size={20} color="#65605A" />
+              </TouchableOpacity>
+            );
+            if (idx === 0) {
+              return (
+                <OnboardingTarget key={room.id} id="rooms.roomCard" borderRadius={16}>
+                  {card}
+                </OnboardingTarget>
+              );
+            }
+            return card;
+          })
         )}
 
         <View className="h-16" />
@@ -379,7 +431,10 @@ export default function RoomsScreen() {
         userHabits={habits}
         apiClient={apiClient}
         onClose={() => setShowCreateModal(false)}
-        onRoomCreated={() => fetchRooms(apiClient)}
+        onRoomCreated={() => {
+          fetchRooms(apiClient);
+          useOnboardingStore.getState().completeEvent('ROOM_CREATED');
+        }}
       />
 
       {/* Pre-Join Habit Match Gate Modal */}

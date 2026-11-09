@@ -5,6 +5,18 @@ import { ONBOARDING_STEPS } from '../onboarding/onboarding-constants';
 
 const getStorageKey = (userId: string) => `@streak_onboarding_state_${userId}`;
 
+let navigatorFn: ((route: string) => void) | null = null;
+
+function navigateIfNeeded(route?: string) {
+  if (route && navigatorFn) {
+    try {
+      navigatorFn(route);
+    } catch (e) {
+      console.warn('Failed to navigate for onboarding step:', e);
+    }
+  }
+}
+
 export const useOnboardingStore = create<OnboardingState>((set, get) => ({
   userId: null,
   currentStepId: null,
@@ -16,8 +28,91 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
   stepHistory: [],
   targets: {},
   activeModalLayer: null,
+  conditionalFlags: {},
 
-  startForUser: async (userId: string, hasHabits = false, hasRooms = false) => {
+  setNavigator: (nav: ((route: string) => void) | null) => {
+    navigatorFn = nav;
+  },
+
+  setConditionalFlag: (stepId: string, enabled: boolean) => {
+    set((state) => ({
+      conditionalFlags: {
+        ...state.conditionalFlags,
+        [stepId]: enabled,
+      },
+    }));
+  },
+
+  clearSession: () => {
+    set({
+      userId: null,
+      currentStepId: null,
+      currentSection: null,
+      isActive: false,
+      isCompleted: false,
+      isDismissed: false,
+      skippedSections: [],
+      stepHistory: [],
+      targets: {},
+      activeModalLayer: null,
+      conditionalFlags: {},
+    });
+  },
+
+  loadForUser: async (userId: string) => {
+    if (!userId) return;
+
+    try {
+      const storageKey = getStorageKey(userId);
+      const rawData = await AsyncStorage.getItem(storageKey);
+
+      if (!rawData) {
+        // Existing user who never had onboarding started on signup: do NOT auto-start
+        set({
+          userId,
+          isActive: false,
+          isCompleted: false,
+          isDismissed: false,
+          currentStepId: null,
+          currentSection: null,
+          stepHistory: [],
+        });
+        return;
+      }
+
+      const saved = JSON.parse(rawData);
+      if (saved.isCompleted || saved.isDismissed || !saved.isActive) {
+        set({
+          userId,
+          isActive: false,
+          isCompleted: !!saved.isCompleted,
+          isDismissed: !!saved.isDismissed,
+          currentStepId: null,
+          currentSection: null,
+          stepHistory: [],
+        });
+        return;
+      }
+
+      const step = ONBOARDING_STEPS.find((s) => s.id === saved.currentStepId) || ONBOARDING_STEPS[0];
+      set({
+        userId,
+        currentStepId: step.id,
+        currentSection: step.section,
+        isActive: true,
+        isCompleted: false,
+        isDismissed: false,
+        startedAt: saved.startedAt || new Date().toISOString(),
+        skippedSections: saved.skippedSections || [],
+        stepHistory: saved.stepHistory || [],
+      });
+      navigateIfNeeded(step.route);
+    } catch (e) {
+      console.warn('Failed to load onboarding for user:', e);
+    }
+  },
+
+  startForUser: async (userId: string, hasHabits = false, _hasRooms = false) => {
     if (!userId) return;
 
     try {
@@ -51,6 +146,7 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
           skippedSections: saved.skippedSections || [],
           stepHistory: saved.stepHistory || [],
         });
+        navigateIfNeeded(step.route);
         return;
       }
 
@@ -72,7 +168,10 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
         startedAt: nowIso,
         skippedSections: [],
         stepHistory: [],
+        conditionalFlags: {},
       });
+
+      navigateIfNeeded(initialStep.route);
 
       await AsyncStorage.setItem(
         storageKey,
@@ -94,7 +193,7 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
   },
 
   completeEvent: async (event: OnboardingCompletionEvent) => {
-    const { currentStepId, userId, isActive, isCompleted, isDismissed, stepHistory } = get();
+    const { currentStepId, userId, isActive, isCompleted, isDismissed, stepHistory, conditionalFlags } = get();
     if (!isActive || !currentStepId || isCompleted || isDismissed) return;
 
     const currentStep = ONBOARDING_STEPS.find((s) => s.id === currentStepId);
@@ -109,17 +208,21 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
 
     const currentIndex = ONBOARDING_STEPS.findIndex((s) => s.id === currentStepId);
     if (currentIndex === -1 || currentIndex >= ONBOARDING_STEPS.length - 1) {
-      get().complete();
+      await get().complete();
       return;
     }
 
     let nextIndex = currentIndex + 1;
-    while (nextIndex < ONBOARDING_STEPS.length && ONBOARDING_STEPS[nextIndex].isConditional) {
+    while (
+      nextIndex < ONBOARDING_STEPS.length &&
+      ONBOARDING_STEPS[nextIndex].isConditional &&
+      !conditionalFlags[ONBOARDING_STEPS[nextIndex].id]
+    ) {
       nextIndex++;
     }
 
     if (nextIndex >= ONBOARDING_STEPS.length) {
-      get().complete();
+      await get().complete();
       return;
     }
 
@@ -131,6 +234,10 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
       currentSection: nextStep.section,
       stepHistory: newHistory,
     });
+
+    if (nextStep.route && nextStep.route !== currentStep.route) {
+      navigateIfNeeded(nextStep.route);
+    }
 
     if (userId) {
       try {
@@ -154,15 +261,17 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
   },
 
   next: async () => {
-    get().completeEvent('NEXT_EXPLANATION');
+    await get().completeEvent('NEXT_EXPLANATION');
   },
 
   previous: async () => {
     const { currentStepId, userId, stepHistory } = get();
     if (!currentStepId) return;
 
+    const currentStep = ONBOARDING_STEPS.find((s) => s.id === currentStepId);
+
     let targetStepId: string | null = null;
-    let newHistory = [...stepHistory];
+    const newHistory = [...stepHistory];
 
     if (newHistory.length > 0) {
       targetStepId = newHistory.pop() || null;
@@ -183,6 +292,10 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
       currentSection: prevStep.section,
       stepHistory: newHistory,
     });
+
+    if (prevStep.route && prevStep.route !== currentStep?.route) {
+      navigateIfNeeded(prevStep.route);
+    }
 
     if (userId) {
       try {
@@ -218,6 +331,10 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
       stepHistory: newHistory,
     });
 
+    if (targetStep.route) {
+      navigateIfNeeded(targetStep.route);
+    }
+
     if (userId) {
       try {
         await AsyncStorage.setItem(
@@ -243,13 +360,15 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     const { currentSection, userId, currentStepId, stepHistory } = get();
     if (!currentSection) return;
 
-    const nextSectionStep = ONBOARDING_STEPS.find(
-      (s) => s.section !== currentSection && !get().skippedSections.includes(s.section)
-    );
+    const currentIndex = ONBOARDING_STEPS.findIndex((s) => s.id === currentStepId);
     const nextSkipped = [...get().skippedSections, currentSection];
 
+    const nextSectionStep = ONBOARDING_STEPS.slice(Math.max(0, currentIndex + 1)).find(
+      (s) => s.section !== currentSection && !nextSkipped.includes(s.section) && !s.isConditional
+    );
+
     if (!nextSectionStep) {
-      get().complete();
+      await get().complete();
       return;
     }
 
@@ -261,6 +380,10 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
       skippedSections: nextSkipped,
       stepHistory: newHistory,
     });
+
+    if (nextSectionStep.route) {
+      navigateIfNeeded(nextSectionStep.route);
+    }
 
     if (userId) {
       try {
@@ -341,10 +464,17 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     if (!userId) return;
     try {
       await AsyncStorage.removeItem(getStorageKey(userId));
-      get().startForUser(userId);
+      await get().startForUser(userId, false, false);
     } catch (e) {
       console.warn('Failed to reset onboarding state:', e);
     }
+  },
+
+  replay: async (explicitUserId?: string) => {
+    const targetUserId = explicitUserId || get().userId;
+    if (!targetUserId) return;
+    await get().resetForUser(targetUserId);
+    navigateIfNeeded('/(tabs)/today');
   },
 
   registerTarget: (registration: TargetRegistration) => {

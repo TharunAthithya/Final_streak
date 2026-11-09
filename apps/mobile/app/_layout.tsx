@@ -6,6 +6,8 @@ import { Slot, useRouter, useSegments } from 'expo-router';
 
 import { useAuthStore } from '../src/store/auth-store';
 import { useSyncStore } from '../src/store/sync-store';
+import { useOnboardingStore } from '../src/store/onboarding-store';
+import { OnboardingOverlay } from '../src/onboarding/OnboardingOverlay';
 import { NoticeProvider } from '../src/components/ui/Notice';
 import { SkeletonBox } from '../src/components/ui/SkeletonBox';
 
@@ -26,6 +28,16 @@ export default function RootLayout() {
     initAuth();
     loadQueue();
   }, []);
+
+  // Inject router navigator into onboarding store
+  useEffect(() => {
+    useOnboardingStore.getState().setNavigator((route: string) => {
+      router.navigate(route as any);
+    });
+    return () => {
+      useOnboardingStore.getState().setNavigator(null);
+    };
+  }, [router]);
 
   // Handle routing based on auth state
   useEffect(() => {
@@ -60,7 +72,10 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <StatusBar style="light" />
       <NoticeProvider>
-        <Slot />
+        <View style={{ flex: 1 }}>
+          <Slot />
+          {token && <OnboardingOverlay useNativeModal={false} />}
+        </View>
       </NoticeProvider>
     </SafeAreaProvider>
   );

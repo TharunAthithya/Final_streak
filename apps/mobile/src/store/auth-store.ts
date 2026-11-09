@@ -4,6 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { env } from '../config/env';
+import { useOnboardingStore } from './onboarding-store';
 
 // SecureStore adapter for Supabase session persistence
 const SecureStoreAdapter = {
@@ -116,6 +117,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
 
         set({ token: session.access_token, user: profile, error: null });
+        if (profile?.id) {
+          useOnboardingStore.getState().loadForUser(profile.id);
+        }
       }
 
       // 2. Subscribe to auth state changes
@@ -174,6 +178,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile));
       
       set({ token: data.session.access_token, user: profile, error: null });
+      if (profile?.id) {
+        await useOnboardingStore.getState().loadForUser(profile.id);
+      }
     } catch (e: any) {
       set({ error: e.message || 'Authentication failed' });
       throw e;
@@ -213,6 +220,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile));
 
       set({ token: data.session.access_token, user: profile, error: null });
+      if (profile?.id) {
+        await useOnboardingStore.getState().resetForUser(profile.id);
+      }
     } catch (e: any) {
       set({ error: e.message || 'Registration failed' });
       throw e;
@@ -246,6 +256,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       console.warn('Supabase signOut error:', e);
     } finally {
       await AsyncStorage.removeItem(PROFILE_CACHE_KEY);
+      useOnboardingStore.getState().clearSession();
       set({ token: null, user: null, error: null });
     }
   },

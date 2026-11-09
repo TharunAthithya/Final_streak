@@ -12,6 +12,9 @@ import { StreakApiClient } from '@streak/api-client';
 import { HabitResponse, ScheduleType } from '@streak/contracts';
 import { DotPulse } from '../ui/DotPulse';
 import { useNotice } from '../ui/Notice';
+import { useOnboardingStore } from '../../store/onboarding-store';
+import { OnboardingTarget } from '../../onboarding/OnboardingTarget';
+import { OnboardingOverlay } from '../../onboarding/OnboardingOverlay';
 
 interface CreateRoomModalProps {
   visible: boolean;
@@ -72,6 +75,24 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
       setCustomDaysInput('30');
     }
   }, [visible, userHabits]);
+
+  const currentOnboardingStepId = useOnboardingStore((s) => s.currentStepId);
+  const isOnboardingActive = useOnboardingStore((s) => s.isActive);
+
+  // Sync wizard step with onboarding tutorial step
+  useEffect(() => {
+    if (!visible || !isOnboardingActive) return;
+    if (currentOnboardingStepId === 'room.create.habits') {
+      setStep(1);
+    } else if (currentOnboardingStepId === 'room.create.invite') {
+      setStep(2);
+    } else if (currentOnboardingStepId === 'room.create.duration') {
+      setStep(3);
+      if (!roomName.trim()) {
+        setRoomName('Daily Accountability');
+      }
+    }
+  }, [visible, isOnboardingActive, currentOnboardingStepId]);
 
   // Debounced user search
   useEffect(() => {
@@ -226,6 +247,8 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
 
         {/* Step Content */}
         <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
+          <OnboardingTarget id="rooms.createWizard" modalLayer="createRoom" borderRadius={16}>
+            <View>
           {step === 1 && (
             <View>
               <Text className="text-base font-bold text-[#F5F2EC] mb-1">
@@ -464,6 +487,8 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
               </View>
             </View>
           )}
+            </View>
+          </OnboardingTarget>
         </ScrollView>
 
         {/* Footer Navigation Buttons */}
@@ -479,7 +504,17 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
 
           {step < 3 ? (
             <TouchableOpacity
-              onPress={() => setStep((s) => (s + 1) as any)}
+              onPress={() => {
+                const nextStep = (step + 1) as 1 | 2 | 3;
+                setStep(nextStep);
+                if (isOnboardingActive) {
+                  if (step === 1 && currentOnboardingStepId === 'room.create.habits') {
+                    useOnboardingStore.getState().next();
+                  } else if (step === 2 && currentOnboardingStepId === 'room.create.invite') {
+                    useOnboardingStore.getState().next();
+                  }
+                }
+              }}
               className="flex-1 py-3.5 bg-[#E8C08A] rounded-2xl justify-center items-center"
             >
               <Text className="text-sm font-bold text-[#241C14]">
@@ -500,6 +535,7 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
             </TouchableOpacity>
           )}
         </View>
+        <OnboardingOverlay modalLayer="createRoom" useNativeModal={false} />
       </View>
     </Modal>
   );

@@ -32,6 +32,8 @@ import { useHomeHero } from '../../src/hooks/useHomeHero';
 import { useDailyStoryStore } from '../../src/store/daily-story-store';
 import { BeforeYouBeginCard } from '../../src/components/coaching/BeforeYouBeginCard';
 import { DailyStoryModal } from '../../src/components/coaching/DailyStoryModal';
+import { useOnboardingStore } from '../../src/store/onboarding-store';
+import { OnboardingTarget } from '../../src/onboarding/OnboardingTarget';
 import { isHabitScheduledForDate, getHabitScheduleLabel, getNextScheduledDay, getSyncAwareHabits, toLocalDateString } from '../../src/utils/streak';
 import { Icon } from '../../src/components/ui/Icon';
 import { calculateCalendarGridStatuses, getCalendarGridDates, validateFreeze } from '../../src/utils/freeze';
@@ -75,6 +77,17 @@ export default function TodayScreen() {
   const handleCompleteStory = async () => {
     await completeStoryForDate(todayStr);
     setShowDailyStoryModal(false);
+    useOnboardingStore.getState().completeEvent('LESSON_CLOSED');
+  };
+
+  const handleCloseDailyStory = () => {
+    setShowDailyStoryModal(false);
+    useOnboardingStore.getState().completeEvent('LESSON_CLOSED');
+  };
+
+  const handleOpenDailyStory = () => {
+    setShowDailyStoryModal(true);
+    useOnboardingStore.getState().completeEvent('LESSON_OPENED');
   };
 
   // See all habits modal state
@@ -83,12 +96,18 @@ export default function TodayScreen() {
   // Habit creation form state
   const [showCreate, setShowCreate] = useState(false);
 
+  const handleOpenCreateHabit = () => {
+    setShowCreate(true);
+    useOnboardingStore.getState().completeEvent('HABIT_SHEET_OPENED');
+  };
+
   useEffect(() => {
     fetchHabits(apiClient);
     fetchNotifications(apiClient);
 
-    // Auto-popup daily story on first launch of the day if splash hasn't been completed/seen
-    if (!hasSeenSplashToday && !isStoryCompletedToday) {
+    // Auto-popup daily story on first launch of the day if splash hasn't been completed/seen,
+    // except while the onboarding tutorial is actively guiding the user to tap Begin.
+    if (!hasSeenSplashToday && !isStoryCompletedToday && !useOnboardingStore.getState().isActive) {
       setShowDailyStoryModal(true);
     }
   }, []);
@@ -235,6 +254,7 @@ export default function TodayScreen() {
       });
       setShowCreate(false);
       notice.success('Habit created successfully!');
+      useOnboardingStore.getState().completeEvent('HABIT_CREATED');
     } catch (e: any) {
       notice.error(e.message || 'Failed to create habit');
     }
@@ -334,34 +354,38 @@ export default function TodayScreen() {
 
         {/* Before You Begin Card (Stays visible all day, transitioning from Active to Reassuring Completed state) */}
         <View className="px-6">
-          <BeforeYouBeginCard
-            isCompleted={isStoryCompletedToday}
-            onPressBegin={() => setShowDailyStoryModal(true)}
-          />
+          <OnboardingTarget id="today.lesson" borderRadius={16}>
+            <BeforeYouBeginCard
+              isCompleted={isStoryCompletedToday}
+              onPressBegin={handleOpenDailyStory}
+            />
+          </OnboardingTarget>
         </View>
 
         {/* Today's Promise Card Section */}
         <View className="px-6 mb-8">
-          <View className="bg-[#181513] border border-[#2B2521] rounded-3xl p-6 flex-row justify-between items-center">
-            <View className="flex-1 pr-4">
-              <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-3">
-                Today's Promise
-              </Text>
-              <View className="flex-row items-baseline mb-1">
-                <Text className="text-4xl font-bold text-[#F5F2EC] mr-1.5">{keptPromises}</Text>
-                <Text className="text-lg text-[#9C958C] font-medium">of {totalPromises} kept</Text>
+          <OnboardingTarget id="today.promiseHero" borderRadius={24}>
+            <View className="bg-[#181513] border border-[#2B2521] rounded-3xl p-6 flex-row justify-between items-center">
+              <View className="flex-1 pr-4">
+                <Text className="text-xs font-bold text-[#65605A] uppercase tracking-widest mb-3">
+                  Today's Promise
+                </Text>
+                <View className="flex-row items-baseline mb-1">
+                  <Text className="text-4xl font-bold text-[#F5F2EC] mr-1.5">{keptPromises}</Text>
+                  <Text className="text-lg text-[#9C958C] font-medium">of {totalPromises} kept</Text>
+                </View>
+                <Text className="text-xs text-[#9C958C] mb-4">
+                  {remainingPromises > 0 ? `${remainingPromises} promises remaining today` : 'All promises kept today!'}
+                </Text>
+                <View className="flex-row items-center">
+                  <Icon name="streak" size={14} color="#E8C08A" className="mr-1.5" />
+                  <Text className="text-xs text-[#E8C08A] font-semibold">{globalStreak}-day streak</Text>
+                </View>
               </View>
-              <Text className="text-xs text-[#9C958C] mb-4">
-                {remainingPromises > 0 ? `${remainingPromises} promises remaining today` : 'All promises kept today!'}
-              </Text>
-              <View className="flex-row items-center">
-                <Icon name="streak" size={14} color="#E8C08A" className="mr-1.5" />
-                <Text className="text-xs text-[#E8C08A] font-semibold">{globalStreak}-day streak</Text>
-              </View>
+              {/* Progress ring */}
+              <ProgressRing percentage={percentageDone} size={100} strokeWidth={8} />
             </View>
-            {/* Progress ring */}
-            <ProgressRing percentage={percentageDone} size={100} strokeWidth={8} />
-          </View>
+          </OnboardingTarget>
         </View>
 
         {/* Habits Header */}
@@ -395,10 +419,10 @@ export default function TodayScreen() {
           ) : (
             <>
               {/* Today's Habits List */}
-              {todayHabits.map((habit) => {
+              {todayHabits.map((habit, idx) => {
                 const gridDates = getCalendarGridDates();
                 const freezableDates = gridDates.filter((d) => validateFreeze(habit, d).valid);
-                return (
+                const card = (
                   <HabitCard
                     key={habit.id}
                     name={habit.name}
@@ -416,6 +440,14 @@ export default function TodayScreen() {
                     onCardPress={() => setSelectedHabitForDetail(habit)}
                   />
                 );
+                if (idx === 0) {
+                  return (
+                    <OnboardingTarget key={habit.id} id="today.createdHabit" borderRadius={20}>
+                      {card}
+                    </OnboardingTarget>
+                  );
+                }
+                return card;
               })}
 
               {/* Other Days Section */}
@@ -424,14 +456,24 @@ export default function TodayScreen() {
                   <Text className="text-base font-bold text-[#9C958C] mb-3">
                     Other Days
                   </Text>
-                  {otherDayHabits.map((habit) => (
-                    <OtherDayHabitRow
-                      key={habit.id}
-                      name={habit.name}
-                      nextDayLabel={getNextScheduledDay(habit)}
-                      onCardPress={() => setSelectedHabitForDetail(habit)}
-                    />
-                  ))}
+                  {otherDayHabits.map((habit, idx) => {
+                    const row = (
+                      <OtherDayHabitRow
+                        key={habit.id}
+                        name={habit.name}
+                        nextDayLabel={getNextScheduledDay(habit)}
+                        onCardPress={() => setSelectedHabitForDetail(habit)}
+                      />
+                    );
+                    if (todayHabits.length === 0 && idx === 0) {
+                      return (
+                        <OnboardingTarget key={habit.id} id="today.createdHabit" borderRadius={16}>
+                          {row}
+                        </OnboardingTarget>
+                      );
+                    }
+                    return row;
+                  })}
                 </View>
               )}
             </>
@@ -452,7 +494,7 @@ export default function TodayScreen() {
         story={todayStory}
         promiseDay={promiseDay}
         isReadonly={isStoryCompletedToday}
-        onClose={() => setShowDailyStoryModal(false)}
+        onClose={handleCloseDailyStory}
         onComplete={handleCompleteStory}
       />
 
@@ -533,12 +575,16 @@ export default function TodayScreen() {
       />
 
       {/* FAB Plus Button */}
-      <TouchableOpacity
-        onPress={() => setShowCreate(!showCreate)}
-        className="absolute bottom-6 right-6 w-14 h-14 bg-[#E8C08A] rounded-full justify-center items-center shadow-lg"
-      >
-        <Icon name="plus" size={28} color="#241C14" />
-      </TouchableOpacity>
+      <View className="absolute bottom-6 right-6">
+        <OnboardingTarget id="today.createHabit" borderRadius={28}>
+          <TouchableOpacity
+            onPress={handleOpenCreateHabit}
+            className="w-14 h-14 bg-[#E8C08A] rounded-full justify-center items-center shadow-lg"
+          >
+            <Icon name="plus" size={28} color="#241C14" />
+          </TouchableOpacity>
+        </OnboardingTarget>
+      </View>
     </View>
   );
 }

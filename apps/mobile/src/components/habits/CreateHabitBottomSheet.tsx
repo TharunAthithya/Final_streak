@@ -17,6 +17,9 @@ import { CompletionButton } from './CompletionButton';
 import { AVAILABLE_HABIT_ICONS, resolveHabitIcon } from '../../utils/habit-icons';
 import { DotPulse } from '../ui/DotPulse';
 import { useNotice } from '../ui/Notice';
+import { useOnboardingStore } from '../../store/onboarding-store';
+import { OnboardingTarget } from '../../onboarding/OnboardingTarget';
+import { OnboardingOverlay } from '../../onboarding/OnboardingOverlay';
 
 import { HabitResponse } from '@streak/contracts';
 
@@ -100,6 +103,22 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
       }
     }
   }, [name]);
+
+  // Debounced onboarding completion when user finishes typing a habit name
+  useEffect(() => {
+    if (!visible || !name.trim() || name.trim().length < 2) return;
+    const timer = setTimeout(() => {
+      if (useOnboardingStore.getState().currentStepId === 'habit.name') {
+        useOnboardingStore.getState().completeEvent('HABIT_NAME_ENTERED');
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [name, visible]);
+
+  // Sync scheduleType with conditional onboarding step 'habit.specificDays'
+  useEffect(() => {
+    useOnboardingStore.getState().setConditionalFlag('habit.specificDays', scheduleType === 'SPECIFIC_DAYS');
+  }, [scheduleType]);
 
   // Validation checks
   useEffect(() => {
@@ -285,25 +304,32 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
               <View className="space-y-4">
                 
                 {/* Habit Name */}
-                <View className="mb-4">
-                  <Text className="text-[11px] font-bold text-[#65605A] uppercase tracking-wider mb-2">
-                    Habit Name
-                  </Text>
-                  <TextInput
-                    value={name}
-                    onChangeText={(val) => {
-                      setName(val);
-                      setTouchedName(true);
-                    }}
-                    placeholder="e.g. Meditate, Workout, Drink Water"
-                    placeholderTextColor="#65605A"
-                    maxLength={32}
-                    className="px-4 py-3 bg-[#0B0B0C] border border-[#2B2521] text-[#F5F2EC] rounded-xl font-medium"
-                  />
-                  {nameError ? (
-                    <Text className="text-xs text-[#E8899A] mt-1 font-medium">{nameError}</Text>
-                  ) : null}
-                </View>
+                <OnboardingTarget id="habit.name" modalLayer="createHabit" borderRadius={12}>
+                  <View className="mb-4">
+                    <Text className="text-[11px] font-bold text-[#65605A] uppercase tracking-wider mb-2">
+                      Habit Name
+                    </Text>
+                    <TextInput
+                      value={name}
+                      onChangeText={(val) => {
+                        setName(val);
+                        setTouchedName(true);
+                      }}
+                      onSubmitEditing={() => {
+                        if (name.trim()) {
+                          useOnboardingStore.getState().completeEvent('HABIT_NAME_ENTERED');
+                        }
+                      }}
+                      placeholder="e.g. Meditate, Workout, Drink Water"
+                      placeholderTextColor="#65605A"
+                      maxLength={32}
+                      className="px-4 py-3 bg-[#0B0B0C] border border-[#2B2521] text-[#F5F2EC] rounded-xl font-medium"
+                    />
+                    {nameError ? (
+                      <Text className="text-xs text-[#E8899A] mt-1 font-medium">{nameError}</Text>
+                    ) : null}
+                  </View>
+                </OnboardingTarget>
 
                 {/* Description */}
                 <View className="mb-4">
@@ -321,109 +347,115 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
                 </View>
 
                 {/* Icon Picker Grid */}
-                <View className="mb-5">
-                  <Text className="text-[11px] font-bold text-[#65605A] uppercase tracking-wider mb-3">
-                    Choose Icon
-                  </Text>
-                  <View className="bg-[#181513] border border-[#2B2521] p-4 rounded-2xl">
-                    {Object.entries(groupedIcons).map(([category, icons]) => (
-                      <View key={category} className="mb-4">
-                        <Text className="text-[10px] font-bold text-[#65605A] uppercase tracking-wider mb-2">
-                          {category}
-                        </Text>
-                        <View className="flex-row flex-wrap justify-start">
-                          {icons.map((iconItem) => {
-                            const isSelected = selectedIcon === iconItem.name;
-                            return (
-                              <TouchableOpacity
-                                key={iconItem.name}
-                                onPress={() => setSelectedIcon(iconItem.name)}
-                                className={`w-[14%] aspect-square items-center justify-center m-[1.3%] rounded-xl ${
-                                  isSelected ? 'bg-[#3A2E1F] border border-[#E8C08A]' : 'bg-[#221C16] border border-[#2B2521]/10'
-                                }`}
-                                style={isSelected ? { transform: [{ scale: 1.05 }] } : undefined}
-                              >
-                                <Icon
-                                  name={iconItem.name}
-                                  size={18}
-                                  color={isSelected ? '#E8C08A' : '#9C958C'}
-                                  family="material"
-                                />
-                              </TouchableOpacity>
-                            );
-                          })}
+                <OnboardingTarget id="habit.icon" modalLayer="createHabit" borderRadius={16}>
+                  <View className="mb-5">
+                    <Text className="text-[11px] font-bold text-[#65605A] uppercase tracking-wider mb-3">
+                      Choose Icon
+                    </Text>
+                    <View className="bg-[#181513] border border-[#2B2521] p-4 rounded-2xl">
+                      {Object.entries(groupedIcons).map(([category, icons]) => (
+                        <View key={category} className="mb-4">
+                          <Text className="text-[10px] font-bold text-[#65605A] uppercase tracking-wider mb-2">
+                            {category}
+                          </Text>
+                          <View className="flex-row flex-wrap justify-start">
+                            {icons.map((iconItem) => {
+                              const isSelected = selectedIcon === iconItem.name;
+                              return (
+                                <TouchableOpacity
+                                  key={iconItem.name}
+                                  onPress={() => setSelectedIcon(iconItem.name)}
+                                  className={`w-[14%] aspect-square items-center justify-center m-[1.3%] rounded-xl ${
+                                    isSelected ? 'bg-[#3A2E1F] border border-[#E8C08A]' : 'bg-[#221C16] border border-[#2B2521]/10'
+                                  }`}
+                                  style={isSelected ? { transform: [{ scale: 1.05 }] } : undefined}
+                                >
+                                  <Icon
+                                    name={iconItem.name}
+                                    size={18}
+                                    color={isSelected ? '#E8C08A' : '#9C958C'}
+                                    family="material"
+                                  />
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
                         </View>
-                      </View>
-                    ))}
+                      ))}
+                    </View>
                   </View>
-                </View>
+                </OnboardingTarget>
 
                 {/* Schedule Segmented Control */}
-                <View className="mb-4">
-                  <Text className="text-[11px] font-bold text-[#65605A] uppercase tracking-wider mb-2">
-                    Schedule
-                  </Text>
-                  <View className="flex-row bg-[#181513] p-1 border border-[#2B2521] rounded-xl">
-                    <TouchableOpacity
-                      onPress={() => setScheduleType('DAILY')}
-                      className={`flex-1 py-3 items-center rounded-lg ${
-                        scheduleType === 'DAILY' ? 'bg-[#E8C08A]' : 'bg-transparent'
-                      }`}
-                    >
-                      <Text
-                        className={`font-semibold text-xs ${
-                          scheduleType === 'DAILY' ? 'text-[#241C14]' : 'text-[#9C958C]'
+                <OnboardingTarget id="habit.schedule" modalLayer="createHabit" borderRadius={12}>
+                  <View className="mb-4">
+                    <Text className="text-[11px] font-bold text-[#65605A] uppercase tracking-wider mb-2">
+                      Schedule
+                    </Text>
+                    <View className="flex-row bg-[#181513] p-1 border border-[#2B2521] rounded-xl">
+                      <TouchableOpacity
+                        onPress={() => setScheduleType('DAILY')}
+                        className={`flex-1 py-3 items-center rounded-lg ${
+                          scheduleType === 'DAILY' ? 'bg-[#E8C08A]' : 'bg-transparent'
                         }`}
                       >
-                        Every Day
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => setScheduleType('SPECIFIC_DAYS')}
-                      className={`flex-1 py-3 items-center rounded-lg ${
-                        scheduleType === 'SPECIFIC_DAYS' ? 'bg-[#E8C08A]' : 'bg-transparent'
-                      }`}
-                    >
-                      <Text
-                        className={`font-semibold text-xs ${
-                          scheduleType === 'SPECIFIC_DAYS' ? 'text-[#241C14]' : 'text-[#9C958C]'
+                        <Text
+                          className={`font-semibold text-xs ${
+                            scheduleType === 'DAILY' ? 'text-[#241C14]' : 'text-[#9C958C]'
+                          }`}
+                        >
+                          Every Day
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => setScheduleType('SPECIFIC_DAYS')}
+                        className={`flex-1 py-3 items-center rounded-lg ${
+                          scheduleType === 'SPECIFIC_DAYS' ? 'bg-[#E8C08A]' : 'bg-transparent'
                         }`}
                       >
-                        Specific Days
-                      </Text>
-                    </TouchableOpacity>
+                        <Text
+                          className={`font-semibold text-xs ${
+                            scheduleType === 'SPECIFIC_DAYS' ? 'text-[#241C14]' : 'text-[#9C958C]'
+                          }`}
+                        >
+                          Specific Days
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                </View>
+                </OnboardingTarget>
 
                 {/* Specific Days Circular Selectors */}
                 {scheduleType === 'SPECIFIC_DAYS' && (
-                  <View className="mb-4">
-                    <Text className="text-[11px] font-bold text-[#65605A] uppercase tracking-wider mb-2">
-                      Days of Week
-                    </Text>
-                    <View className="flex-row justify-between">
-                      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, idx) => {
-                        const isSelected = selectedDays.includes(idx);
-                        return (
-                          <TouchableOpacity
-                            key={idx}
-                            onPress={() => toggleDaySelection(idx)}
-                            className={`w-9 h-9 rounded-full items-center justify-center border ${
-                              isSelected ? 'bg-[#E8C08A] border-[#E8C08A]' : 'bg-transparent border-[#2B2521]'
-                            }`}
-                          >
-                            <Text
-                              className={`text-xs font-semibold ${
-                                isSelected ? 'text-[#241C14]' : 'text-[#9C958C]'
+                  <OnboardingTarget id="habit.specificDays" modalLayer="createHabit" borderRadius={12}>
+                    <View className="mb-4">
+                      <Text className="text-[11px] font-bold text-[#65605A] uppercase tracking-wider mb-2">
+                        Days of Week
+                      </Text>
+                      <View className="flex-row justify-between">
+                        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, idx) => {
+                          const isSelected = selectedDays.includes(idx);
+                          return (
+                            <TouchableOpacity
+                              key={idx}
+                              onPress={() => toggleDaySelection(idx)}
+                              className={`w-9 h-9 rounded-full items-center justify-center border ${
+                                isSelected ? 'bg-[#E8C08A] border-[#E8C08A]' : 'bg-transparent border-[#2B2521]'
                               }`}
                             >
-                              {day}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
+                              <Text
+                                className={`text-xs font-semibold ${
+                                  isSelected ? 'text-[#241C14]' : 'text-[#9C958C]'
+                                }`}
+                              >
+                                {day}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
                     </View>
-                  </View>
+                  </OnboardingTarget>
                 )}
 
                 {/* Philosophy Card */}
@@ -439,31 +471,34 @@ export const CreateHabitBottomSheet: React.FC<CreateHabitBottomSheetProps> = ({
                 </View>
 
                 {/* Action Button */}
-                <TouchableOpacity
-                  onPress={handleCreate}
-                  disabled={!isFormValid || loading}
-                  className={`w-full py-4 rounded-xl items-center justify-center ${
-                    isFormValid && !loading ? 'bg-[#E8C08A]' : 'bg-[#3A2E1F]'
-                  }`}
-                >
-                  {loading ? (
-                    <DotPulse color="#241C14" size={6} />
-                  ) : (
-                    <Text
-                      className={`font-bold text-base ${
-                        isFormValid ? 'text-[#241C14]' : 'text-[#9C958C]'
-                      }`}
-                    >
-                      {initialHabit ? 'Save Changes' : 'Create Promise'}
-                    </Text>
-                  )}
-                </TouchableOpacity>
+                <OnboardingTarget id="habit.create" modalLayer="createHabit" borderRadius={12}>
+                  <TouchableOpacity
+                    onPress={handleCreate}
+                    disabled={!isFormValid || loading}
+                    className={`w-full py-4 rounded-xl items-center justify-center ${
+                      isFormValid && !loading ? 'bg-[#E8C08A]' : 'bg-[#3A2E1F]'
+                    }`}
+                  >
+                    {loading ? (
+                      <DotPulse color="#241C14" size={6} />
+                    ) : (
+                      <Text
+                        className={`font-bold text-base ${
+                          isFormValid ? 'text-[#241C14]' : 'text-[#9C958C]'
+                        }`}
+                      >
+                        {initialHabit ? 'Save Changes' : 'Create Promise'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </OnboardingTarget>
 
               </View>
 
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
+        <OnboardingOverlay modalLayer="createHabit" useNativeModal={false} />
       </View>
     </Modal>
   );

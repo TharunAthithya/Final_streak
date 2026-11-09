@@ -1,7 +1,9 @@
 import React from 'react';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Icon } from '../../src/components/ui/Icon';
+import { OnboardingTarget } from '../../src/onboarding/OnboardingTarget';
+import { useOnboardingStore } from '../../src/store/onboarding-store';
 
 export default function TabsLayout() {
   const isIos = Platform.OS === 'ios';
@@ -30,9 +32,20 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="rooms"
+        listeners={{
+          focus: () => {
+            useOnboardingStore.getState().completeEvent('ROOMS_OPENED');
+          },
+        }}
         options={{
           title: 'Rooms',
-          tabBarIcon: ({ color }) => <Icon name="rooms" size={20} color={color as string} />,
+          tabBarIcon: ({ color }) => (
+            <OnboardingTarget id="rooms.tab" borderRadius={12}>
+              <View className="px-4 py-1 items-center justify-center">
+                <Icon name="rooms" size={20} color={color as string} />
+              </View>
+            </OnboardingTarget>
+          ),
         }}
       />
       <Tabs.Screen
