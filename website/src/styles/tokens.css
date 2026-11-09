@@ -1,0 +1,22 @@
+/* Design tokens — mirror these in src/three/palette.ts when the 3D scene lands (Phase 2). */
+:root {
+  --bg: #17120D;
+  --glow: #3A2E21;
+  --gold: #E3C28D;
+  --gold-ink: #241C14;
+  --cream: #F5F1EA;
+  --muted: #A89F94;
+  --card: #0D0C0B;
+  --card-border: rgba(227, 194, 141, 0.15);
+  --pink: #D9879A;
+  --sage: #8FB59A;
+
+  --font-display: 'Archivo', 'Arial Black', system-ui, sans-serif;
+  --font-body: 'Plus Jakarta Sans', system-ui, sans-serif;
+
+  --wrap: 1240px;
+  --gutter: clamp(20px, 4vw, 48px);
+  --radius-card: 28px;
+  --ease-hard: cubic-bezier(.7, 0, .2, 1);   /* type ("brutalist") */
+  --ease-soft: cubic-bezier(.2, .8, .2, 1);  /* 3D / glass */
+}

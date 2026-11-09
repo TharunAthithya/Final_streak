@@ -1,0 +1,6 @@
+node_modules
+dist
+.DS_Store
+*.tsbuildinfo
+# APKs are large; host them on GitHub Releases and set SITE.apk.url instead of committing them.
+public/downloads/*.apk
