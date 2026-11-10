@@ -7,7 +7,7 @@ export const SITE = {
   tagline: 'Keep your promises. Keep your streak.',
   apk: {
     /** Point this at a GitHub Release asset to avoid host file-size limits. */
-    url: 'downloads/streak.apk',
+    url: 'https://github.com/TharunAthithya/Final_streak/releases/download/v1.0.0/streak.4.apk',
     version: '1.0.0',
     sizeLabel: '100 MB',
     minAndroid: 'Android 7.0+',
