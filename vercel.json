@@ -1,0 +1,7 @@
+{
+  "framework": "vite",
+  "buildCommand": "cd website && npm run build",
+  "outputDirectory": "website/dist",
+  "installCommand": "cd website && npm install"
+}
+
