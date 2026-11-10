@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd website && npm run build",
-  "outputDirectory": "website/dist",
-  "installCommand": "cd website && npm install"
+  "buildCommand": "if [ -d website ]; then cd website && npm run build && cp -r dist ../dist; else npm run build; fi",
+  "outputDirectory": "dist",
+  "installCommand": "if [ -d website ]; then cd website; fi && npm install"
 }
