@@ -9,8 +9,8 @@ export const SITE = {
     /** Point this at a GitHub Release asset to avoid host file-size limits. */
     url: 'downloads/streak.apk',
     version: '1.0.0',
-    sizeLabel: '', // TODO: e.g. '38 MB' — hidden while empty
-    minAndroid: '', // TODO: e.g. 'Android 7.0+' — hidden while empty
+    sizeLabel: '100 MB',
+    minAndroid: 'Android 7.0+',
   },
   /** Front-end only waitlist. Leave empty to hide the form (no fake success). */
   waitlistEndpoint: '',
